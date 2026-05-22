@@ -63,6 +63,30 @@ download_dir.mkdir(parents=True, exist_ok=True)
 @app.on_event("startup")
 async def startup():
     init_db()
+
+    # 启动文件服务器（内部源文件下载，端口 18791）
+    try:
+        from app.agent.fileserver import create_file_server
+        from aiohttp import web
+
+        fs_app = create_file_server(config["download_dir"])
+        fs_app["node_id"] = config.get("node_id", "sk")
+        fs_app["file_token"] = config.get("file_token", "")
+
+        async def _run_fileserver():
+            runner = web.AppRunner(fs_app)
+            await runner.setup()
+            site = web.TCPSite(runner, "0.0.0.0", 18791)
+            await site.start()
+            logger.info("File server running on :18791")
+            while True:
+                await asyncio.sleep(3600)
+
+        asyncio.create_task(_run_fileserver())
+        logger.info("File server started on port 18791")
+    except Exception as e:
+        logger.warning(f"File server startup failed: {e}")
+
     from app.agent.orchestrator import Orchestrator
     import app.agent.orchestrator as orch_mod
     orch = Orchestrator()
