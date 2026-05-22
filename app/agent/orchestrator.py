@@ -430,7 +430,7 @@ class Orchestrator:
                     "node_name": n["node_name"] or n["node_id"],
                     "node_type": n["node_type"] or "full",
                     "progress": n["progress"],
-                    "download_speed": n.get("download_speed", 0),
+                    "download_speed": int(n["download_speed"]) if "download_speed" in n.keys() else 0,
                     "status": n["status"],
                     "internal_url": n["internal_url"],
                     "gid": n["gid"]
@@ -475,6 +475,7 @@ class Orchestrator:
             "node_name": n["node_name"] or n["node_id"],
             "node_type": n["node_type"] or "full",
             "progress": n["progress"],
+            "download_speed": int(n["download_speed"]) if "download_speed" in n.keys() else 0,
             "status": n["status"],
             "internal_url": n["internal_url"],
             "local_path": n["local_path"],
