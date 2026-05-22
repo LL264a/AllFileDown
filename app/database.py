@@ -28,6 +28,11 @@ def init_db():
         conn.execute("ALTER TABLE nodes ADD COLUMN save_path TEXT DEFAULT ''")
     except sqlite3.OperationalError:
         pass  # 列已存在
+    # 迁移：确保 download_speed 列存在
+    try:
+        conn.execute("ALTER TABLE task_nodes ADD COLUMN download_speed INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # 列已存在
 
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS nodes (
@@ -58,6 +63,7 @@ def init_db():
             task_id TEXT NOT NULL,
             node_id TEXT NOT NULL,
             progress REAL DEFAULT 0.0,
+            download_speed INTEGER DEFAULT 0,
             status TEXT DEFAULT 'waiting',
             local_path TEXT,
             internal_url TEXT,

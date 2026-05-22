@@ -87,14 +87,19 @@
                 const barClass = ['completed','seeding'].includes(n.status) ? 'progress-bar-green'
                     : n.status === 'failed' || n.status === 'cancelled' ? 'progress-bar-red'
                     : n.status === 'paused' ? 'progress-bar-yellow'
+                    : n.status === 'offline' ? 'progress-bar-red'
                     : 'progress-bar-accent';
+                const speedHtml = n.status === 'active' && n.download_speed > 0
+                    ? `<span class="meta-chip" style="margin-left:auto">⬇ ${fmtSize(n.download_speed)}/s</span>`
+                    : '';
                 return `
-                    <div class="node-progress">
-                        <span class="node-label">${esc(n.node_name || n.node_id)}</span>
+                    <div class="node-progress" data-node="${esc(n.node_id)}">
+                        <span class="node-label ${n.status === 'offline' ? 'offline' : ''}">${esc(n.node_name || n.node_id)}</span>
                         <div class="progress-bar-wrap">
                             <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
                         </div>
                         <span class="pct">${pct}%</span>
+                        ${speedHtml}
                     </div>
                 `;
             }).join('');
@@ -106,7 +111,6 @@
             const isCancelled = task.status === 'cancelled';
             const isFinished = ['completed','all_completed','seeding'].includes(task.status);
 
-            // Buttons: different actions per status
             let actionBtns = '';
             if (isPaused) {
                 actionBtns += `<button class="task-action-btn resume" onclick="resumeTask('${attr(task.id)}')" title="继续下载">▶️</button>`;
@@ -123,7 +127,7 @@
             }
 
             return `
-                <div class="task-item" onclick="showTaskDetail('${attr(task.id)}')" style="cursor:pointer">
+                <div class="task-item" id="task-${attr(task.id)}" onclick="showTaskDetail('${attr(task.id)}')" style="cursor:pointer">
                     <div class="task-header">
                         <div class="task-info">
                             <div class="name">${esc(filename)} <span style="font-size:0.7rem;color:var(--text-tertiary)">${task.id.slice(0,8)}</span></div>
@@ -138,10 +142,70 @@
                             <div class="task-actions">${actionBtns}</div>
                         </div>
                     </div>
-                    ${nodesHtml}
+                    <div class="nodes-section" id="nodes-${attr(task.id)}">
+                        ${nodesHtml}
+                    </div>
                 </div>
             `;
         }).join('');
+
+        // Fetch remote node info for each task
+        tasks.forEach(t => {
+            if (t.id) fetchNodeOverview(t.id);
+        });
+    }
+
+    async function fetchNodeOverview(taskId) {
+        try {
+            const res = await fetch('/api/task/' + encodeURIComponent(taskId) + '/overview');
+            if (!res.ok) return;
+            const data = await res.json();
+            const nodesSection = document.getElementById('nodes-' + attr(taskId));
+            if (!nodesSection || !data.nodes) return;
+
+            // Update existing node entries and add missing ones
+            for (const n of data.nodes) {
+                const pct = Math.round((n.progress || 0) * 100);
+                const barClass = ['completed','seeding'].includes(n.status) ? 'progress-bar-green'
+                    : n.status === 'failed' || n.status === 'cancelled' ? 'progress-bar-red'
+                    : n.status === 'paused' ? 'progress-bar-yellow'
+                    : n.status === 'offline' ? 'progress-bar-red'
+                    : 'progress-bar-accent';
+                const speedHtml = (n.status === 'active' || n.status === 'downloading') && n.download_speed > 0
+                    ? `<span class="meta-chip" style="margin-left:auto">⬇ ${fmtSize(n.download_speed)}/s</span>`
+                    : '';
+
+                let existing = nodesSection.querySelector('[data-node="' + esc(n.node_id) + '"]');
+                if (existing) {
+                    existing.querySelector('.pct').textContent = pct + '%';
+                    const bar = existing.querySelector('.progress-bar');
+                    bar.style.width = pct + '%';
+                    bar.className = 'progress-bar ' + barClass;
+                    // Update speed display
+                    const existingSpeed = existing.querySelector('.meta-chip');
+                    if (existingSpeed) {
+                        if (speedHtml) existingSpeed.outerHTML = speedHtml;
+                        else existingSpeed.remove();
+                    } else if (speedHtml) {
+                        existing.appendChild(document.createRange().createContextualFragment(speedHtml));
+                    }
+                    const label = existing.querySelector('.node-label');
+                    label.classList.toggle('offline', n.status === 'offline');
+                } else {
+                    // Add new node row from remote
+                    const row = document.createElement('div');
+                    row.className = 'node-progress';
+                    row.setAttribute('data-node', n.node_id);
+                    row.innerHTML = '<span class="node-label' + (n.status === 'offline' ? ' offline' : '') + '">' + esc(n.node_name || n.node_id) + '</span>'
+                        + '<div class="progress-bar-wrap"><div class="progress-bar ' + barClass + '" style="width:' + pct + '%"></div></div>'
+                        + '<span class="pct">' + pct + '%</span>'
+                        + speedHtml;
+                    nodesSection.appendChild(row);
+                }
+            }
+        } catch(e) {
+            // Ignore overview fetch errors
+        }
     }
 
     window.cancelTask = async function(taskId) {

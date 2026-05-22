@@ -3,6 +3,7 @@ Allfiledown — Web 页面路由
 """
 import os
 import ssl
+import asyncio
 from pathlib import Path
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -80,6 +81,61 @@ async def task_detail(task_id: str):
     if not detail:
         return JSONResponse({"error": "Not found"}, status_code=404)
     return detail
+
+
+@router.get("/api/task/{task_id}/overview")
+async def task_nodes_overview(task_id: str):
+    """查询所有节点的任务状态（包括远程节点）"""
+    from app.agent.orchestrator import orchestrator
+    import aiohttp
+
+    local = await orchestrator.get_task_detail(task_id)
+    if not local:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    node_map = {}
+    for n in local.get("nodes", []):
+        node_map[n["node_id"]] = n
+
+    # 查询远程节点
+    peers = config.get("peers", [])
+    local_node_id = config.get("node_id", "")
+
+    async def fetch_peer(peer):
+        peer_id = peer.get("id", "")
+        if peer_id == local_node_id:
+            return
+        host = peer.get("host", "")
+        port = peer.get("port", 18790)
+        url = f"http://{host}:{port}/api/task/{task_id}"
+        timeout = aiohttp.ClientTimeout(total=5)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        for n in data.get("nodes", []):
+                            if n["node_id"] not in node_map:
+                                node_map[n["node_id"]] = n
+                            else:
+                                # 合并远程数据
+                                node_map[n["node_id"]].update(n)
+        except Exception:
+            node_map[peer_id] = {
+                "node_id": peer_id,
+                "node_name": peer.get("name", peer_id),
+                "progress": 0,
+                "download_speed": 0,
+                "status": "offline",
+                "gid": None
+            }
+
+    tasks = [fetch_peer(p) for p in peers]
+    await asyncio.gather(*tasks)
+
+    merged = dict(local)
+    merged["nodes"] = list(node_map.values())
+    return merged
 
 
 @router.post("/api/node/add")

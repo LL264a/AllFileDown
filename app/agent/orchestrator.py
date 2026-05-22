@@ -195,9 +195,10 @@ class Orchestrator:
                     try:
                         info = await get_status(row["gid"])
                         if info:
+                            speed = int(info.get("speed", 0))
                             db.execute(
-                                "UPDATE task_nodes SET progress = ?, status = ?, updated_at = ? WHERE task_id = ? AND node_id = ?",
-                                (info["progress"] / 100, info["status"], 
+                                "UPDATE task_nodes SET progress = ?, status = ?, download_speed = ?, updated_at = ? WHERE task_id = ? AND node_id = ?",
+                                (info["progress"] / 100, info["status"], speed,
                                  datetime.now(timezone.utc).isoformat(),
                                  row["task_id"], config["node_id"])
                             )
@@ -429,6 +430,7 @@ class Orchestrator:
                     "node_name": n["node_name"] or n["node_id"],
                     "node_type": n["node_type"] or "full",
                     "progress": n["progress"],
+                    "download_speed": n.get("download_speed", 0),
                     "status": n["status"],
                     "internal_url": n["internal_url"],
                     "gid": n["gid"]
