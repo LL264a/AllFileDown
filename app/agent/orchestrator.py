@@ -3,7 +3,10 @@ Allfiledown — 任务编排调度
 """
 import asyncio
 import json
+import logging
 import uuid
+
+logger = logging.getLogger("afd")
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -46,6 +49,8 @@ class Orchestrator:
         download_dir = Path(config["download_dir"]) / task_id
         download_dir.mkdir(parents=True, exist_ok=True)
 
+        logger.info(f"Creating task {task_id}: {url} filename={filename}")
+
         # 数据库记录
         db = get_db()
         db.execute(
@@ -65,6 +70,7 @@ class Orchestrator:
                 str(download_dir),
                 filename=filename
             )
+            logger.info(f"Task {task_id}: aria2 started gid={gid}")
             db.execute(
                 "UPDATE task_nodes SET gid = ? WHERE task_id = ? AND node_id = ?",
                 (gid, task_id, config["node_id"])
@@ -76,6 +82,7 @@ class Orchestrator:
             db.commit()
             add_event(task_id, config["node_id"], "download_started", json.dumps({"url": url}))
         except Exception as e:
+            logger.warning(f"Task {task_id}: aria2 failed: {e}")
             db.execute(
                 "UPDATE task_nodes SET status = ? WHERE task_id = ? AND node_id = ?",
                 (f"failed: {e}", task_id, config["node_id"])
@@ -89,6 +96,7 @@ class Orchestrator:
 
         # 广播给对等节点
         peers = config.get("peers", [])
+        logger.info(f"Task {task_id}: broadcasting to {len(peers)} peers")
         for peer in peers:
             if peer.get("node_type", "full") in ("full", "download"):
                 asyncio.create_task(self._broadcast_task(peer, task_id, url, filename))
@@ -97,6 +105,8 @@ class Orchestrator:
 
     async def _broadcast_task(self, peer, task_id, url, filename):
         """向一个对等节点广播任务"""
+        peer_id = peer.get("id", "unknown")
+        logger.info(f"Task {task_id}: broadcasting to peer {peer_id} ({peer.get('host','')}:{peer.get('port','')})")
         result = await self.p2p.send_task(peer, {
             "task_id": task_id,
             "url": url,
@@ -109,9 +119,14 @@ class Orchestrator:
             }
         })
         if "error" in result:
-            # 标记节点离线
+            logger.warning(f"Task {task_id}: broadcast to {peer_id} failed: {result['error']}")
             db = get_db()
             db.execute("UPDATE nodes SET status = ? WHERE id = ?", ("offline", peer.get("id", "unknown")))
+            db.commit()
+        else:
+            logger.info(f"Task {task_id}: broadcast to {peer_id} success")
+            db = get_db()
+            db.execute("UPDATE nodes SET status = ? WHERE id = ?", ("online", peer.get("id", "unknown")))
             db.commit()
 
     async def receive_task(self, task_id, url, filename):
@@ -191,6 +206,9 @@ class Orchestrator:
                     (config["node_id"],)
                 ).fetchall()
 
+                if rows:
+                    logger.debug(f"Status poll: {len(rows)} active tasks")
+
                 for row in rows:
                     try:
                         info = await get_status(row["gid"])
@@ -221,12 +239,13 @@ class Orchestrator:
                                     (row["task_id"],)
                                 )
                                 db.commit()
+                                logger.info(f"Task {row['task_id']}: download completed, path={local_path}")
                                 add_event(row["task_id"], config["node_id"], "download_completed",
                                           json.dumps({"path": local_path}))
 
                             db.commit()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Status poll error for gid={row['gid']}: {e}")
 
             except Exception:
                 pass

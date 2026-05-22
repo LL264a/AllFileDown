@@ -4,7 +4,10 @@ Allfiledown — Web 页面路由
 import os
 import ssl
 import asyncio
+import logging
 from pathlib import Path
+
+logger = logging.getLogger("afd")
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -61,9 +64,12 @@ async def create_task(request: Request):
     url = data.get("url")
     filename = data.get("filename")
     if not url:
+        logger.warning(f"Task create failed: no URL provided, data={data}")
         return JSONResponse({"error": "URL is required"}, status_code=400)
     from app.agent.orchestrator import orchestrator
+    logger.info(f"Creating task: url={url[:80]}... filename={filename}")
     task_id = await orchestrator.create_task(url, filename)
+    logger.info(f"Task created: {task_id}")
     return {"task_id": task_id, "status": "created"}
 
 
@@ -351,7 +357,9 @@ async def serve_local_file(task_id: str, filename: str, request: Request):
     download_dir = Path(config["download_dir"])
     file_path = download_dir / task_id / filename
     if not file_path.exists() or not file_path.is_file():
+        logger.warning(f"File download 404: task={task_id} file={filename} path={file_path}")
         return JSONResponse({"error": "File not found"}, status_code=404)
+    logger.info(f"File download: task={task_id} file={filename}")
     return FileResponse(str(file_path))
 
 
