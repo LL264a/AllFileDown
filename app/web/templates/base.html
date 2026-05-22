@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>AFD - {% block title %}下载管理{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        {% block head_styles %}{% endblock %}
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="topbar-logo">AFD <span>{% block logo_subtitle %}下载管理{% endblock %}</span></div>
+            <div class="topbar-nav">
+                <a href="/" class="{% block nav_files_class %}{% endblock %}"><span>📂</span><span class="nav-label">文件</span></a>
+                <a href="/downloads" class="{% block nav_downloads_class %}{% endblock %}"><span>📥</span><span class="nav-label">任务</span></a>
+                <a href="/stations" class="{% block nav_stations_class %}{% endblock %}"><span>📊</span><span class="nav-label">节点</span></a>
+                <a href="/nodes" class="{% block nav_nodes_class %}{% endblock %}"><span>⚙️</span><span class="nav-label">设置</span></a>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <span class="node-tag">{{ node_name }}</span>
+        </div>
+    </div>
+
+    <div class="container" style="padding-top:16px;">
+        {% block content %}{% endblock %}
+    </div>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

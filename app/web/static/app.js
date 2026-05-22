@@ -1,0 +1,305 @@
+// AFD 下载管理 v2 — Full Feature
+(() => {
+    'use strict';
+
+    let refreshCount = 0;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadTasks();
+
+        // Download form
+        const form = document.getElementById('downloadForm');
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const url = document.getElementById('downloadUrl').value.trim();
+                const filename = document.getElementById('filename').value.trim();
+                const statusEl = document.getElementById('submitStatus');
+                if (!url) return;
+
+                // Detect magnet/torrent
+                const isMagnet = url.startsWith('magnet:');
+                const isTorrent = url.endsWith('.torrent');
+
+                statusEl.className = 'status-msg';
+                statusEl.textContent = '⏳ 提交中...';
+                statusEl.style.display = 'block';
+
+                try {
+                    const res = await fetch('/api/task/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url, filename: filename || null })
+                    });
+                    const data = await res.json();
+                    if (data.task_id) {
+                        const label = isMagnet ? '磁力链接' : isTorrent ? '种子' : '下载';
+                        statusEl.className = 'status-msg success';
+                        statusEl.textContent = `✅ ${label}任务已创建 (${data.task_id.slice(0,8)}...)`;
+                        document.getElementById('downloadUrl').value = '';
+                        document.getElementById('filename').value = '';
+                        loadTasks();
+                    } else {
+                        statusEl.className = 'status-msg error';
+                        statusEl.textContent = `❌ ${data.error || '创建失败'}`;
+                    }
+                } catch (err) {
+                    statusEl.className = 'status-msg error';
+                    statusEl.textContent = `❌ 请求失败: ${err.message}`;
+                }
+            });
+        }
+    });
+
+    // ============ Tasks ============
+    window.loadTasks = async function() {
+        try {
+            const res = await fetch('/api/task/list');
+            const data = await res.json();
+            renderTasks(data.tasks || []);
+        } catch (err) {
+            console.error('loadTasks:', err);
+        }
+    };
+
+    function renderTasks(tasks) {
+        const container = document.getElementById('taskList');
+        const countEl = document.getElementById('taskCount');
+        if (countEl) countEl.textContent = tasks.length;
+
+        if (tasks.length === 0) {
+            container.innerHTML = '<div class="empty-state" style="padding:40px 20px"><span style="font-size:2rem;display:block;margin-bottom:8px">📥</span><p style="color:#555;font-size:0.85rem">暂无下载任务，粘贴链接开始吧</p></div>';
+            return;
+        }
+
+        container.innerHTML = tasks.map(task => {
+            const statusMap = {downloading:'下载中',paused:'已暂停',completed:'已完成',failed:'失败',pending:'等待中',seeding:'做种',cancelled:'已取消',all_completed:'全部完成'};
+            const st = statusMap[task.status] || task.status;
+            const badgeClass = ['all_completed','completed'].includes(task.status) ? 'badge-completed'
+                : task.status === 'failed' ? 'badge-failed'
+                : task.status === 'cancelled' ? 'badge-failed'
+                : task.status === 'pending' ? 'badge-pending'
+                : task.status === 'paused' ? 'badge-warning'
+                : task.status === 'seeding' ? 'badge-seeding' : 'badge-downloading';
+
+            const nodesHtml = (task.nodes || []).map(n => {
+                const pct = Math.round((n.progress || 0) * 100);
+                const barClass = ['completed','seeding'].includes(n.status) ? 'progress-bar-green'
+                    : n.status === 'failed' || n.status === 'cancelled' ? 'progress-bar-red'
+                    : n.status === 'paused' ? 'progress-bar-yellow'
+                    : 'progress-bar-accent';
+                return `
+                    <div class="node-progress">
+                        <span class="node-label">${esc(n.node_name || n.node_id)}</span>
+                        <div class="progress-bar-wrap">
+                            <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
+                        </div>
+                        <span class="pct">${pct}%</span>
+                    </div>
+                `;
+            }).join('');
+
+            const filename = task.filename || task.url.split('/').pop() || task.url;
+            const isDownloading = task.status === 'downloading';
+            const isPaused = task.status === 'paused';
+            const isFailed = task.status === 'failed';
+            const isCancelled = task.status === 'cancelled';
+            const isFinished = ['completed','all_completed','seeding'].includes(task.status);
+
+            // Buttons: different actions per status
+            let actionBtns = '';
+            if (isPaused) {
+                actionBtns += `<button class="task-action-btn resume" onclick="resumeTask('${attr(task.id)}')" title="继续下载">▶️</button>`;
+            }
+            if (isDownloading) {
+                actionBtns += `<button class="task-action-btn pause" onclick="pauseTask('${attr(task.id)}')" title="暂停">⏸️</button>`;
+                actionBtns += `<button class="task-action-btn cancel" onclick="cancelTask('${attr(task.id)}')" title="取消">⏹</button>`;
+            }
+            if (isFailed || isCancelled) {
+                actionBtns += `<button class="task-action-btn retry" onclick="retryTask('${attr(task.id)}')" title="重新下载">🔄</button>`;
+            }
+            if (!isDownloading) {
+                actionBtns += `<button class="task-action-btn delete" onclick="deleteTask('${attr(task.id)}')" title="删除">🗑️</button>`;
+            }
+
+            return `
+                <div class="task-item" onclick="showTaskDetail('${attr(task.id)}')" style="cursor:pointer">
+                    <div class="task-header">
+                        <div class="task-info">
+                            <div class="name">${esc(filename)} <span style="font-size:0.7rem;color:var(--text-tertiary)">${task.id.slice(0,8)}</span></div>
+                            <div class="url">${esc(task.url)}</div>
+                            <div class="task-meta-bar">
+                                ${task.total_size ? `<span class="meta-chip">📦 ${fmtSize(task.total_size)}</span>` : ''}
+                                ${isDownloading || isPaused ? `<span class="meta-chip detail-btn" onclick="event.stopPropagation();showTaskDetail('${attr(task.id)}')">📋 详情</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="task-status-col">
+                            <span class="badge ${badgeClass}">${st}</span>
+                            <div class="task-actions">${actionBtns}</div>
+                        </div>
+                    </div>
+                    ${nodesHtml}
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.cancelTask = async function(taskId) {
+        if (!confirm('确定取消这个下载任务？')) return;
+        try {
+            const res = await fetch('/api/task/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task_id: taskId })
+            });
+            if (res.ok) loadTasks();
+        } catch (err) {
+            alert('取消失败: ' + err.message);
+        }
+    };
+
+    window.pauseTask = async function(taskId) {
+        try {
+            const res = await fetch('/api/task/pause', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task_id: taskId })
+            });
+            if (res.ok) loadTasks();
+        } catch (err) {
+            alert('暂停失败: ' + err.message);
+        }
+    };
+
+    window.resumeTask = async function(taskId) {
+        try {
+            const res = await fetch('/api/task/resume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task_id: taskId })
+            });
+            if (res.ok) loadTasks();
+        } catch (err) {
+            alert('继续失败: ' + err.message);
+        }
+    };
+
+    window.retryTask = async function(taskId) {
+        if (!confirm('确定重新下载这个任务？')) return;
+        try {
+            const res = await fetch('/api/task/retry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task_id: taskId })
+            });
+            if (res.ok) loadTasks();
+        } catch (err) {
+            alert('重试失败: ' + err.message);
+        }
+    };
+
+    window.deleteTask = async function(taskId) {
+        if (!confirm('确定删除这个任务？文件和记录将被彻底清除。')) return;
+        try {
+            const res = await fetch('/api/task/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task_id: taskId })
+            });
+            if (res.ok) loadTasks();
+        } catch (err) {
+            alert('删除失败: ' + err.message);
+        }
+    };
+
+    window.clearCompleted = async function() {
+        if (!confirm('确定清除所有已完成/失败/已取消的任务？')) return;
+        try {
+            const res = await fetch('/api/task/clear-completed', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (data.status === 'cleared') loadTasks();
+        } catch (err) {
+            alert('清除失败: ' + err.message);
+        }
+    };
+
+    // ============ Task Detail ============
+    window.showTaskDetail = async function(taskId) {
+        try {
+            const res = await fetch(`/api/task/${taskId}`);
+            const task = await res.json();
+            if (!task || task.error) return;
+
+            const statusMap = {downloading:'下载中',paused:'已暂停',completed:'已完成',failed:'失败',pending:'等待中',seeding:'做种',cancelled:'已取消',all_completed:'全部完成'};
+            const st = statusMap[task.status] || task.status;
+
+            let subFilesHtml = '';
+            if (task.nodes && task.nodes.length) {
+                subFilesHtml = task.nodes.map(n => {
+                    const pct = Math.round((n.progress || 0) * 100);
+                    return `<tr><td style="color:var(--text-primary)">${esc(n.node_name)}</td><td>${pct}%</td><td>${n.status}</td><td style="font-size:0.7rem">${n.gid ? n.gid.slice(0,8) : '-'}</td></tr>`;
+                }).join('');
+            }
+
+            // Copy URL helper
+            const detailHtml = `
+                <div class="detail-modal-overlay" onclick="closeTaskDetail(event)">
+                    <div class="detail-modal" onclick="event.stopPropagation()">
+                        <div class="detail-head">
+                            <h3>${esc(task.filename || task.url.split('/').pop() || task.id)}</h3>
+                            <button class="detail-close" onclick="closeTaskDetail()">✕</button>
+                        </div>
+                        <div class="detail-body">
+                            <div class="detail-grid">
+                                <span class="detail-label">任务 ID</span><span class="detail-value mono">${task.id}</span>
+                                <span class="detail-label">状态</span><span class="detail-value badge ${['completed','all_completed'].includes(task.status)?'badge-completed':task.status==='failed'?'badge-failed':task.status==='paused'?'badge-warning':task.status==='seeding'?'badge-seeding':'badge-downloading'}">${st}</span>
+                                <span class="detail-label">链接</span><span class="detail-value" style="word-break:break-all;font-size:0.78rem"><a href="${esc(task.url)}" target="_blank" style="color:var(--accent)">${esc(task.url)}</a></span>
+                                <span class="detail-label">大小</span><span class="detail-value">${fmtSize(task.total_size) || '未知'}</span>
+                                ${task.downloaded_size ? `<span class="detail-label">已下载</span><span class="detail-value">${fmtSize(task.downloaded_size)}</span>` : ''}
+                                <span class="detail-label">创建时间</span><span class="detail-value" style="font-size:0.78rem">${task.created_at || '-'}</span>
+                                <span class="detail-label">更新时间</span><span class="detail-value" style="font-size:0.78rem">${task.updated_at || '-'}</span>
+                            </div>
+                            ${subFilesHtml ? `
+                                <h4 style="margin:14px 0 8px;font-size:0.82rem;color:var(--text-secondary)">节点状态</h4>
+                                <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+                                    <thead><tr style="color:var(--text-tertiary)"><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border-color)">节点</th><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border-color)">进度</th><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border-color)">状态</th><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border-color)">GID</th></tr></thead>
+                                    <tbody>${subFilesHtml}</tbody>
+                                </table>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Remove existing modal if any
+            const old = document.querySelector('.detail-modal-overlay');
+            if (old) old.remove();
+            document.body.insertAdjacentHTML('beforeend', detailHtml);
+        } catch (err) {
+            console.error('showTaskDetail:', err);
+        }
+    };
+
+    window.closeTaskDetail = function(e) {
+        if (e && e.target !== e.currentTarget) return;
+        const el = document.querySelector('.detail-modal-overlay');
+        if (el) el.remove();
+    };
+
+    // ============ Utils ============
+    function fmtSize(bytes) {
+        if (!bytes || bytes === 0) return '';
+        const u = ['B','KB','MB','GB','TB']; let i = 0, s = bytes;
+        while (s >= 1024 && i < u.length-1) { s /= 1024; i++; }
+        return s.toFixed(1) + ' ' + u[i];
+    }
+
+    function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function attr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+    // Auto refresh
+    setInterval(() => loadTasks(), 5000);
+})();

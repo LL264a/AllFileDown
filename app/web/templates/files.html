@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>AFD &middot; &#x6587;&#x4ef6;&#x5e93;</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="topbar-logo">AFD <span>&#x6587;&#x4ef6;&#x5e93;</span></div>
+            <div class="topbar-nav">
+                <a href="/" class="active">&#x1f4c2; <span class="nav-label">&#x6587;&#x4ef6;</span></a>
+                <a href="/downloads">&#x1f4e5; <span class="nav-label">&#x4efb;&#x52a1;</span></a>
+                <a href="/nodes">&#x2699;&#xfe0f; <span class="nav-label">&#x8bbe;&#x7f6e;</span></a>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <span class="node-tag">{{ node_name }}</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="search-wrap">
+            <span class="search-icon">&#x1f50d;</span>
+            <input type="search" id="fileSearch" placeholder="&#x641c;&#x7d22;&#x6587;&#x4ef6;..." autocomplete="off" oninput="onSearchInput(this)">
+        </div>
+
+        <div class="filter-pills" id="filterPills">
+            <span class="filter-pill active" data-filter="" onclick="setFilter(this,'all')">&#x5168;&#x90e8;</span>
+            <span class="filter-pill" data-filter="image" onclick="setFilter(this,'image')">&#x1f5bc;&#xfe0f;</span>
+            <span class="filter-pill" data-filter="video" onclick="setFilter(this,'video')">&#x1f3ac;</span>
+            <span class="filter-pill" data-filter="audio" onclick="setFilter(this,'audio')">&#x1f3b5;</span>
+            <span class="filter-pill" data-filter="doc" onclick="setFilter(this,'doc')">&#x1f4c4;</span>
+            <span class="filter-pill" data-filter="zip" onclick="setFilter(this,'zip')">&#x1f5dc;&#xfe0f;</span>
+            <span class="filter-pill" data-filter="binary" onclick="setFilter(this,'binary')">&#x26a1;</span>
+        </div>
+
+        <div class="batch-bar" id="batchBarNested" style="display:none">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.82rem">
+                <input type="checkbox" onchange="toggleAll(this.checked)"> &#x5168;&#x9009;
+            </label>
+            <span class="batch-count" id="batchCountNested">&#x5df2;&#x9009; 0 &#x4e2a;</span>
+            <button class="btn-batch-del" id="batchDelBtnNested" onclick="deleteSelected()">&#x1f5d1;&#xfe0f; &#x5220;&#x9664;&#x9009;&#x4e2d;</button>
+        </div>
+
+        <div id="fileContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <div>&#x52a0;&#x8f7d;&#x4e2d;...</div>
+            </div>
+        </div>
+
+        <div class="stats-bar" style="display:none" id="statsBar">
+            <div class="count">&#x5171; <span id="fileCount">0</span> &#x4e2a;&#x6587;&#x4ef6;</div>
+            <div class="total-size" id="totalSize"></div>
+        </div>
+    </div>
+
+    <div class="source-popup" id="sourcePopup" onclick="closeSourcePopup(event)">
+        <div class="source-sheet" onclick="event.stopPropagation()">
+            <div class="source-sheet-header">
+                <h3 id="sourceTitle">&#x9009;&#x62e9;&#x4e0b;&#x8f7d;&#x6e90;</h3>
+                <button class="close-btn" onclick="closeSourcePopup()">&#x2715;</button>
+            </div>
+            <div id="sourceList"></div>
+        </div>
+    </div>
+
+    <div class="copy-toast" id="copyToast"></div>
+
+    <script>
+        let allFiles = [];
+        let currentSort = 'time';
+        let searchQuery = '';
+        let currentFilter = 'all';
+        let currentFile = null;
+        let selectedIds = new Set();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadFiles();
+            document.addEventListener('click', (e) => {
+                const search = document.getElementById('fileSearch');
+                if (e.target !== search) search.blur();
+            });
+        });
+
+        async function loadFiles() {
+            const el = document.getElementById('fileContent');
+            try {
+                const res = await fetch('/api/files');
+                const data = await res.json();
+                allFiles = data.files || [];
+                render();
+            } catch (err) {
+                el.innerHTML = '<div class="empty-state"><span class="emoji">' +
+                    '\u274c</span><h3>\u52a0\u8f7d\u5931\u8d25</h3><p>' +
+                    esc(err.message) + '</p>' +
+                    '<a class="btn btn-primary" style="display:inline-flex;margin-top:12px" href="javascript:loadFiles()">\u91cd\u8bd5</a></div>';
+            }
+        }
+
+        function onSearchInput(el) {
+            searchQuery = el.value.toLowerCase().trim();
+            render();
+        }
+
+        function filtered() {
+            let files = [...allFiles];
+            if (searchQuery) {
+                files = files.filter(f =>
+                    f.filename.toLowerCase().includes(searchQuery) ||
+                    (f.url && f.url.toLowerCase().includes(searchQuery))
+                );
+            }
+            if (currentFilter !== 'all') {
+                const typeExts = {
+                    image: ['jpg','jpeg','png','gif','webp','svg','bmp','ico'],
+                    video: ['mp4','avi','mkv','mov','webm','flv','wmv','m4v'],
+                    audio: ['mp3','flac','wav','ogg','aac','wma','m4a'],
+                    doc: ['txt','md','json','yml','yaml','xml','csv','log','cfg','conf','ini','toml','pdf','sh','py','js','ts','html','css'],
+                    zip: ['zip','rar','7z','tar','gz','bz2','xz','iso'],
+                    binary: ['exe','msi','dmg','apk','deb','rpm','AppImage']
+                };
+                const exts = typeExts[currentFilter] || [];
+                files = files.filter(f => exts.includes(f.filename.split('.').pop()?.toLowerCase()));
+            }
+            return files;
+        }
+
+        function sorted(files) {
+            return [...files].sort((a, b) => {
+                switch (currentSort) {
+                    case 'time': return new Date(b.downloaded_at || 0) - new Date(a.downloaded_at || 0);
+                    case 'name': return a.filename.localeCompare(b.filename, 'zh');
+                    case 'size': return (b.size || 0) - (a.size || 0);
+                    default: return 0;
+                }
+            });
+        }
+
+        function render() {
+            const el = document.getElementById('fileContent');
+            const files = sorted(filtered());
+
+            const totalFiles = allFiles.length;
+            let totalBytes = 0;
+            allFiles.forEach(f => totalBytes += f.size || 0);
+            document.getElementById('fileCount').textContent = totalFiles;
+            document.getElementById('totalSize').textContent = formatSize(totalBytes);
+            document.getElementById('statsBar').style.display = 'flex';
+
+            if (files.length === 0) {
+                el.innerHTML = '<div class="file-list-wrap" style="border:1px solid var(--border-color);border-radius:var(--radius-lg);background:var(--bg-surface);">' +
+                    '<div class="empty-state"><span class="emoji">' +
+                    (searchQuery ? '\ud83d\udd0d' : '\ud83d\udcc2') + '</span>' +
+                    '<h3>' + (searchQuery ? '\u6ca1\u6709\u627e\u5230\u5339\u914d\u7684\u6587\u4ef6' : '\u8fd8\u6ca1\u6709\u4e0b\u8f7d\u5b8c\u6210\u7684\u6587\u4ef6') + '</h3>' +
+                    '<p>' + (searchQuery ? '\u8bd5\u8bd5\u5176\u4ed6\u5173\u952e\u8bcd' : '\u53bb\u4e0b\u8f7d\u9875\u9762\u63d0\u4ea4\u94fe\u63a5\u5427') + '</p>' +
+                    (searchQuery ? '' : '<a class="btn btn-primary" style="display:inline-flex;margin-top:14px" href="/downloads">\ud83d\udce5 \u53bb\u4e0b\u8f7d</a>') +
+                    '</div></div>';
+                return;
+            }
+
+            let rows = '';
+            for (const f of files) {
+                rows += renderRow(f);
+            }
+            el.innerHTML = '<div class="gh-file-list">' +
+                '<div class="gh-file-list-header">' +
+                '<span class="header-name" onclick="setSort(\'name\')" style="cursor:pointer">' + sortLabel('name', '\u6587\u4ef6\u540d') + '</span>' +
+                '<span class="header-size" onclick="setSort(\'size\')" style="cursor:pointer">' + sortLabel('size', '\u5927\u5c0f') + '</span>' +
+                '<span class="header-time">\u65f6\u95f4</span>' +
+                '<span class="header-actions">\u64cd\u4f5c</span>' +
+                '</div>' + rows + '</div>';
+            updateBatchBar();
+        }
+
+        function sortLabel(col, label) {
+            return currentSort === col ? label + ' \u25be' : label;
+        }
+
+        function renderRow(f) {
+            const iconInfo = fileIcon(f.filename);
+            const time = formatTime(f.downloaded_at);
+            const multiTag = f.multi_source ? '<span class="multi-source-tag">\u2295 \u591a\u6e90</span>' : '';
+            const ext = f.filename.split('.').pop()?.toLowerCase();
+            const imgExts = ['jpg','jpeg','png','gif','webp','svg'];
+            const txtExts = ['txt','md','json','yml','yaml','xml','csv','log','cfg','conf','ini','toml','sh','py','js','ts','html','css'];
+            const canPreview = imgExts.includes(ext) || txtExts.includes(ext);
+            const previewClick = canPreview ? 'onclick="previewFile(' + "'" + escAttr(f.task_id) + "','" + escAttr(f.filename) + "')" + '"' : '';
+            const dlUrl = downloadUrl(f);
+
+            return '<div class="gh-file-row" data-id="' + escAttr(f.task_id) + '">' +
+                '<span class="row-check">' +
+                '<input type="checkbox" class="file-check" data-id="' + escAttr(f.task_id) + '" onchange="updateBatchBar()">' +
+                '</span>' +
+                '<span class="row-icon">' + iconInfo.emoji + '</span>' +
+                '<span class="row-name" ' + previewClick + ' title="' + escAttr(f.filename) + '">' + esc(f.filename) + multiTag + '</span>' +
+                '<span class="row-size">' + (f.size_formatted || formatSize(f.size) || '?') + '</span>' +
+                '<span class="row-time">' + time + '</span>' +
+                '<span class="row-actions">' +
+                '<button class="btn-row btn-dl-row" onclick="window.open(' + "'" + escAttr(dlUrl) + "','_blank')" + '" title="\u4e0b\u8f7d">\u2b07</button>' +
+                '<button class="btn-row" onclick="showSources(event,' + "'" + escAttr(f.task_id) + "')" + '" title="\u9009\u62e9\u4e0b\u8f7d\u6e90">\u2295</button>' +
+                '<button class="btn-row" onclick="renameFile(' + "'" + escAttr(f.task_id) + "','" + escAttr(f.filename) + "')" + '" title="\u91cd\u547d\u540d">\u270f\ufe0f</button>' +
+                '<button class="btn-row btn-del-row" onclick="deleteFile(' + "'" + escAttr(f.task_id) + "')" + '" title="\u5220\u9664">\ud83d\uddd1\ufe0f</button>' +
+                '</span></div>';
+        }
+
+        function setSort(sort) {
+            currentSort = sort;
+            render();
+        }
+
+        function setFilter(el, type) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+            el.classList.add('active');
+            render();
+        }
+
+        function fileIcon(filename) {
+            const ext = filename.split('.').pop()?.toLowerCase();
+            const icons = {
+                txt:'\ud83d\udcc4',md:'\ud83d\udcc4',json:'\ud83d\udccb',yml:'\u2699\ufe0f',yaml:'\u2699\ufe0f',xml:'\ud83d\udccb',csv:'\ud83d\udcca',
+                log:'\ud83d\udcc4',cfg:'\u2699\ufe0f',conf:'\u2699\ufe0f',ini:'\u2699\ufe0f',toml:'\u2699\ufe0f',
+                pdf:'\ud83d\udcd5',
+                zip:'\ud83d\udddc\ufe0f',rar:'\ud83d\udddc\ufe0f','7z':'\ud83d\udddc\ufe0f',tar:'\ud83d\udddc\ufe0f',gz:'\ud83d\udddc\ufe0f',bz2:'\ud83d\udddc\ufe0f',iso:'\ud83d\udcbf',
+                jpg:'\ud83d\uddbc\ufe0f',jpeg:'\ud83d\uddbc\ufe0f',png:'\ud83d\uddbc\ufe0f',gif:'\ud83d\uddbc\ufe0f',webp:'\ud83d\uddbc\ufe0f',svg:'\ud83d\uddbc\ufe0f',
+                mp4:'\ud83c\udfac',avi:'\ud83c\udfac',mkv:'\ud83c\udfac',mov:'\ud83c\udfac',webm:'\ud83c\udfac',
+                mp3:'\ud83c\udfb5',flac:'\ud83c\udfb5',wav:'\ud83c\udfb5',ogg:'\ud83c\udfb5',aac:'\ud83c\udfb5',
+                exe:'\u26a1',msi:'\ud83d\udcbf',dmg:'\ud83d\udcbf',apk:'\ud83d\udcf1',deb:'\ud83d\udc27',rpm:'\ud83d\udc27',
+                sh:'\ud83d\udcbb',py:'\ud83d\udc0d',js:'\ud83d\udfe8',ts:'\ud83d\udfe6',torrent:'\ud83e\uddf2',
+            };
+            const t = {txt:'doc',pdf:'doc',zip:'zip',rar:'zip',jpg:'image',png:'image',mp4:'video',mkv:'video',mp3:'audio',exe:'binary',sh:'binary',py:'doc',js:'doc'};
+            const em = icons[ext] || '\ud83d\udcc4';
+            const type = t[ext] || (['doc','zip','image','video','audio','binary'].includes(ext) ? ext : 'doc');
+            return { emoji: em, type: type };
+        }
+
+        function downloadUrl(file) {
+            if (!file) return '#';
+            if (file.download_url) {
+                return file.download_url.startsWith('/') ? window.location.origin + file.download_url : file.download_url;
+            }
+            return window.location.origin + '/tasks/' + file.task_id + '/' + encodeURIComponent(file.filename);
+        }
+
+        async function deleteFile(taskId) {
+            if (!confirm('\u786e\u5b9a\u5220\u9664\u8fd9\u4e2a\u6587\u4ef6\uff1f\u5220\u9664\u540e\u4e0d\u53ef\u6062\u590d\u3002')) return;
+            try {
+                const res = await fetch('/api/task/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId })
+                });
+                if (res.ok) loadFiles();
+            } catch (err) {
+                alert('\u5220\u9664\u5931\u8d25: ' + err.message);
+            }
+        }
+
+        async function showSources(event, taskId) {
+            event.stopPropagation();
+            const file = allFiles.find(f => f.task_id === taskId);
+            if (!file) return;
+
+            currentFile = file;
+            const popup = document.getElementById('sourcePopup');
+            const list = document.getElementById('sourceList');
+            document.getElementById('sourceTitle').textContent = file.filename;
+
+            let html = '';
+            if (file.sources && file.sources.length > 1) {
+                for (const s of file.sources) {
+                    html += '<div class="source-option" data-url="' + escAttr(s.download_url) + '">' +
+                        '<div><div class="node-name">' + esc(s.node_label || s.node_id) + '</div>' +
+                        (s.is_local ? '<span style="font-size:0.72rem;color:var(--text-tertiary)">\u672c\u673a</span>' : '') +
+                        '</div>' +
+                        '<span class="btn-dl">\u2b07 \u4e0b\u8f7d</span></div>';
+                }
+            } else {
+                const url = downloadUrl(file);
+                html += '<div class="source-option" data-url="' + escAttr(url) + '">' +
+                    '<div class="node-name">\u672c\u673a</div>' +
+                    '<span class="btn-dl">\u2b07 \u4e0b\u8f7d</span></div>';
+            }
+            list.innerHTML = html;
+            popup.classList.add('show');
+        }
+
+        function closeSourcePopup(e) {
+            if (e && e.target !== e.currentTarget) return;
+            document.getElementById('sourcePopup').classList.remove('show');
+        }
+
+        // Click handler for source options
+        document.addEventListener('click', function(e) {
+            const opt = e.target.closest('.source-option');
+            if (opt) {
+                const url = opt.getAttribute('data-url');
+                if (url) window.open(url, '_blank');
+            }
+        });
+
+        function formatTime(iso) {
+            if (!iso) return '';
+            try {
+                const d = new Date(iso);
+                if (isNaN(d.getTime())) return iso;
+                const now = new Date();
+                const diff = now - d;
+                if (diff < 60000) return '\u521a\u521a';
+                if (diff < 3600000) return Math.floor(diff/60000) + '\u5206\u949f\u524d';
+                if (diff < 86400000) return Math.floor(diff/3600000) + '\u5c0f\u65f6\u524d';
+                const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+                const h = String(d.getHours()).padStart(2,'0'), min = String(d.getMinutes()).padStart(2,'0');
+                return y === now.getFullYear() ? m+'-'+day+' '+h+':'+min : y+'-'+m+'-'+day+' '+h+':'+min;
+            } catch { return iso; }
+        }
+
+        function formatSize(bytes) {
+            if (!bytes || bytes === 0) return '';
+            const u = ['B','KB','MB','GB','TB'];
+            let i = 0, s = bytes;
+            while (s >= 1024 && i < u.length-1) { s /= 1024; i++; }
+            return s.toFixed(1) + ' ' + u[i];
+        }
+
+        function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+        function escAttr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+        function updateBatchBar() {
+            const checks = document.querySelectorAll('.file-check:checked');
+            selectedIds = new Set();
+            checks.forEach(cb => selectedIds.add(cb.getAttribute('data-id')));
+            const count = selectedIds.size;
+            document.getElementById('batchCountNested').textContent = '\u5df2\u9009 ' + count + ' \u4e2a';
+            const btn = document.getElementById('batchDelBtnNested');
+            btn.classList.toggle('active', count > 0);
+            document.getElementById('batchBarNested').style.display = 'flex';
+        }
+
+        function toggleAll(checked) {
+            document.querySelectorAll('.file-check').forEach(cb => cb.checked = checked);
+            updateBatchBar();
+        }
+
+        async function deleteSelected() {
+            const ids = Array.from(selectedIds);
+            if (!ids.length) return;
+            if (!confirm('\u786e\u5b9a\u5220\u9664\u9009\u4e2d\u7684 ' + ids.length + ' \u4e2a\u6587\u4ef6\uff1f\u5220\u9664\u540e\u4e0d\u53ef\u6062\u590d\u3002')) return;
+            let deleted = 0;
+            for (const id of ids) {
+                try {
+                    const res = await fetch('/api/task/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ task_id: id })
+                    });
+                    if (res.ok) deleted++;
+                } catch {}
+            }
+            selectedIds = new Set();
+            loadFiles();
+        }
+
+        function previewFile(taskId, filename) {
+            const url = '/api/preview/' + encodeURIComponent(taskId) + '/' + encodeURIComponent(filename);
+            const ext = filename.split('.').pop()?.toLowerCase();
+            const imgExts = ['jpg','jpeg','png','gif','webp','svg'];
+
+            const overlay = document.createElement('div');
+            overlay.className = 'preview-overlay';
+            overlay.onclick = function() { this.remove(); };
+
+            const isImage = imgExts.includes(ext);
+            const bodyContent = isImage
+                ? '<img src="' + escAttr(url) + '" alt="' + escAttr(filename) + '" onclick="event.stopPropagation()">'
+                : '<div class="preview-fail">\u23f3 \u52a0\u8f7d\u4e2d...</div>';
+
+            overlay.innerHTML = '<div class="preview-modal" onclick="event.stopPropagation()">' +
+                '<div class="preview-head"><h3>' + esc(filename) + '</h3>' +
+                '<button class="preview-close" onclick="this.closest(\'.preview-overlay\').remove()">\u2715</button></div>' +
+                '<div class="preview-body" id="previewBody">' + bodyContent + '</div></div>';
+            document.body.appendChild(overlay);
+
+            if (!isImage) {
+                const body = overlay.querySelector('#previewBody');
+                fetch(url)
+                    .then(r => r.text())
+                    .then(function(html) {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const pre = doc.querySelector('pre');
+                        if (pre) {
+                            body.innerHTML = '<pre>' + pre.innerHTML + '</pre>';
+                        } else {
+                            body.innerHTML = '<pre>' + esc(html.slice(0,50000)) + '</pre>';
+                        }
+                    })
+                    .catch(function() { body.innerHTML = '<div class="preview-fail">\u274c \u9884\u89c8\u52a0\u8f7d\u5931\u8d25</div>'; });
+            }
+        }
+
+        async function renameFile(taskId, currentName) {
+            const newName = prompt('\u8bf7\u8f93\u5165\u65b0\u6587\u4ef6\u540d\uff1a', currentName);
+            if (!newName || newName === currentName) return;
+            try {
+                const res = await fetch('/api/file/rename', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId, new_name: newName })
+                });
+                const data = await res.json();
+                if (data.status === 'renamed') { loadFiles(); }
+                else { alert('\u91cd\u547d\u540d\u5931\u8d25: ' + (data.error || '\u672a\u77e5\u9519\u8bef')); }
+            } catch (err) { alert('\u91cd\u547d\u540d\u5931\u8d25: ' + err.message); }
+        }
+    </script>
+</body>
+</html>

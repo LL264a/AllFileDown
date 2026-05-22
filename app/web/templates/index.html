@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>📥 下载管理 - AFD</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* ===== AFD 下载管理 v2 ===== */
+
+        .section-wrap {
+            margin-bottom: 16px;
+        }
+
+        .section-wrap h2 {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            padding: 0 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-wrap h2 .count-badge {
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: var(--text-tertiary);
+            background: var(--bg-surface-alt);
+            padding: 1px 8px;
+            border-radius: var(--radius-full);
+        }
+
+        .form-inline {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .form-inline .input-url { flex: 1; min-width: 200px; }
+        .form-inline .input-filename { width: 160px; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .form-grid .full { grid-column: 1 / -1; }
+
+        @media (max-width: 640px) {
+            .form-inline { flex-direction: column; }
+            .form-inline .input-filename { width: 100%; }
+            .form-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ===== Task List ===== */
+        .task-item {
+            padding: 14px var(--space-xl);
+            border-bottom: 1px solid var(--border-color);
+            transition: background var(--transition-fast);
+        }
+        .task-item:first-child { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+        .task-item:last-child { border-bottom: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+        .task-item:hover { background: var(--bg-elevated-hover); }
+
+        .task-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .task-header .task-info {
+            min-width: 0;
+            flex: 1;
+        }
+        .task-header .task-info .name {
+            font-weight: 600;
+            color: var(--text-primary);
+            word-break: break-all;
+            overflow-wrap: break-word;
+            font-size: 0.9rem;
+        }
+        .task-header .task-info .url {
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            margin-top: 2px;
+            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+        .task-header .task-info .size-info {
+            font-size: 0.78rem;
+            color: var(--green);
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        .node-progress {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 6px;
+        }
+        .node-progress .node-label {
+            width: 60px;
+            font-size: 0.78rem;
+            color: var(--text-tertiary);
+            flex-shrink: 0;
+            font-weight: 500;
+        }
+        .node-progress .pct {
+            width: 36px;
+            text-align: right;
+            color: var(--text-tertiary);
+            font-size: 0.76rem;
+            font-family: var(--font-mono);
+        }
+        .node-progress .source-icon {
+            font-size: 0.7rem;
+            margin-left: 2px;
+        }
+
+        .task-tracker {
+            margin-top: 8px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .task-tracker .dot-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.72rem;
+            color: var(--text-tertiary);
+        }
+        .task-tracker .dot-item .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        /* ===== Node list ===== */
+        .node-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .node-item:last-child { border-bottom: none; }
+        .node-item .node-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .node-item .node-left .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .node-item .node-left .dot.online { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+        .node-item .node-left .dot.offline { background: #444; }
+        .node-item .node-left .dot.unknown { background: var(--yellow); box-shadow: 0 0 6px rgba(234,179,8,0.3); }
+        .node-item .node-left .name { font-weight: 500; font-size: 0.88rem; }
+        .node-item .node-left .host-info { font-size: 0.78rem; color: var(--text-tertiary); }
+
+        .node-type-tag {
+            padding: 2px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 0.68rem;
+            font-weight: 600;
+        }
+        .node-type-tag.full { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(59,130,246,0.2); }
+        .node-type-tag.download { background: var(--yellow-dim); color: var(--yellow); border: 1px solid rgba(234,179,8,0.2); }
+        .node-type-tag.upload { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
+
+        /* ===== Refresh button ===== */
+        .refresh-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 12px;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-tertiary);
+            cursor: pointer;
+            font-size: 0.76rem;
+            transition: all var(--transition-fast);
+        }
+        .refresh-btn:hover {
+            color: var(--text-secondary);
+            background: var(--bg-surface-hover);
+        }
+        .refresh-btn:active {
+            transform: scale(0.95);
+        }
+
+        .task-refresh-btn {
+            color: var(--text-tertiary);
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 4px 10px;
+            cursor: pointer;
+            font-size: 0.76rem;
+            transition: all var(--transition-fast);
+        }
+        .task-refresh-btn:hover {
+            color: var(--text-secondary);
+            background: var(--bg-surface-hover);
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="topbar-logo">AFD <span>下载管理</span></div>
+            <div class="topbar-nav">
+                <a href="/">📂 文件</a>
+                <a href="/downloads" class="active">📥 下载</a>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <span class="node-tag">{{ node_name }}</span>
+        </div>
+    </div>
+
+    <div class="container" style="padding-top:16px;">
+        <!-- Submit Form -->
+        <div class="card section-wrap">
+            <div class="card-header">
+                <h2>创建新下载</h2>
+            </div>
+            <div class="card-body">
+                <form id="downloadForm" class="form-inline">
+                    <input type="url" id="downloadUrl" placeholder="输入下载链接..." required class="input input-url">
+                    <input type="text" id="filename" placeholder="自定义文件名" class="input input-filename">
+                    <button type="submit" class="btn btn-primary">⬇ 下载</button>
+                </form>
+                <div id="submitStatus" class="status-msg"></div>
+            </div>
+        </div>
+
+        <!-- Task List -->
+        <div class="card section-wrap">
+            <div class="card-header">
+                <h2>
+                    下载任务
+                    <span class="count-badge" id="taskCount">0</span>
+                </h2>
+                <button class="task-refresh-btn" onclick="loadTasks()">⟳ 刷新</button>
+            </div>
+            <div class="card-body" style="padding:0;">
+                <div id="taskList">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <div>加载中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Node Management -->
+        <div class="card section-wrap">
+            <div class="card-header">
+                <h2>
+                    节点管理
+                    <span class="count-badge" id="nodeCount">0</span>
+                </h2>
+            </div>
+            <div class="card-body">
+                <form id="nodeForm" class="form-grid">
+                    <input type="text" id="nodeId" placeholder="节点 ID" required class="input">
+                    <input type="text" id="nodeName" placeholder="节点名称" required class="input">
+                    <input type="text" id="nodeHost" placeholder="IP 地址" required class="input">
+                    <input type="number" id="nodePort" placeholder="端口" value="18790" class="input">
+                    <select id="nodeType" class="input full" style="grid-column:1/-1">
+                        <option value="full">上下节点（可下载可上传）</option>
+                        <option value="download">仅下载节点</option>
+                        <option value="upload">仅上传节点</option>
+                    </select>
+                    <input type="text" id="nodeToken" placeholder="Auth Token（可选）" class="input full" style="grid-column:1/-1">
+                    <button type="submit" class="btn btn-success full" style="grid-column:1/-1">＋ 添加节点</button>
+                </form>
+                <div id="nodeList" class="node-list" style="margin-top:16px">
+                    <div class="empty-state" style="padding:20px">
+                        <span style="color:var(--text-muted);font-size:0.85rem">暂无节点</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTasks();
+            loadNodes();
+
+            document.getElementById('downloadForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const url = document.getElementById('downloadUrl').value.trim();
+                const filename = document.getElementById('filename').value.trim();
+                const statusEl = document.getElementById('submitStatus');
+                if (!url) return;
+                statusEl.className = 'status-msg';
+                statusEl.textContent = '⏳ 提交中...';
+                statusEl.style.display = 'block';
+                try {
+                    const res = await fetch('/api/task/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url, filename: filename || null })
+                    });
+                    const data = await res.json();
+                    if (data.task_id) {
+                        statusEl.className = 'status-msg success';
+                        statusEl.textContent = `✅ 任务已创建 (${data.task_id.slice(0,8)}...)`;
+                        document.getElementById('downloadUrl').value = '';
+                        document.getElementById('filename').value = '';
+                        loadTasks();
+                    } else {
+                        statusEl.className = 'status-msg error';
+                        statusEl.textContent = `❌ ${data.error || '创建失败'}`;
+                    }
+                } catch (err) {
+                    statusEl.className = 'status-msg error';
+                    statusEl.textContent = `❌ 请求失败: ${err.message}`;
+                }
+            });
+
+            document.getElementById('nodeForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const nodeId = document.getElementById('nodeId').value.trim();
+                const nodeName = document.getElementById('nodeName').value.trim();
+                const nodeHost = document.getElementById('nodeHost').value.trim();
+                const nodePort = parseInt(document.getElementById('nodePort').value) || 18790;
+                const nodeType = document.getElementById('nodeType').value;
+                const nodeToken = document.getElementById('nodeToken').value.trim();
+                if (!nodeId || !nodeName || !nodeHost) return;
+                try {
+                    const res = await fetch('/api/node/add', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            node_id: nodeId, name: nodeName, host: nodeHost,
+                            port: nodePort, node_type: nodeType, auth_token: nodeToken
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'added') {
+                        document.getElementById('nodeId').value = '';
+                        document.getElementById('nodeName').value = '';
+                        document.getElementById('nodeHost').value = '';
+                        document.getElementById('nodeToken').value = '';
+                        loadNodes();
+                    }
+                } catch (err) {
+                    alert('添加节点失败: ' + err.message);
+                }
+            });
+        });
+
+        // ============ Tasks ============
+        async function loadTasks() {
+            try {
+                const res = await fetch('/api/task/list');
+                const data = await res.json();
+                renderTasks(data.tasks || []);
+            } catch (err) {
+                console.error('loadTasks:', err);
+            }
+        }
+
+        function renderTasks(tasks) {
+            const container = document.getElementById('taskList');
+            document.getElementById('taskCount').textContent = tasks.length;
+
+            if (tasks.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="padding:40px 20px"><span style="font-size:2rem;display:block;margin-bottom:8px">📥</span><p style="color:var(--text-muted);font-size:0.85rem">暂无下载任务，粘贴链接开始吧</p></div>';
+                return;
+            }
+
+            container.innerHTML = tasks.map(task => {
+                const badgeClass = task.status === 'all_completed' || task.status === 'completed' ? 'badge-completed'
+                    : task.status === 'failed' ? 'badge-failed'
+                    : task.status === 'pending' ? 'badge-pending'
+                    : task.status === 'seeding' ? 'badge-seeding' : 'badge-downloading';
+
+                const statusText = {downloading:'下载中',completed:'已完成',failed:'失败',pending:'等待中',seeding:'做种',all_completed:'全部完成'}[task.status] || task.status;
+
+                const nodesHtml = (task.nodes || []).map(n => {
+                    const pct = Math.round((n.progress || 0) * 100);
+                    const barClass = n.status === 'completed' || n.status === 'seeding' ? 'progress-bar-green'
+                        : n.status === 'failed' ? 'progress-bar-red' : 'progress-bar-accent';
+                    const sourceTag = n.internal_url ? '<span class="source-icon" style="color:var(--accent)">⏺</span>' : '';
+                    return `
+                        <div class="node-progress">
+                            <span class="node-label">${escapeHtml(n.node_name || n.node_id)}${sourceTag}</span>
+                            <div class="progress-bar-wrap">
+                                <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
+                            </div>
+                            <span class="pct">${pct}%</span>
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="task-item">
+                        <div class="task-header">
+                            <div class="task-info">
+                                <div class="name">${escapeHtml(task.filename || task.url.split('/').pop() || task.url)}</div>
+                                <div class="url">${escapeHtml(task.url)}</div>
+                                ${task.total_size ? `<div class="size-info">${formatSize(task.total_size)}</div>` : ''}
+                            </div>
+                            <span class="badge ${badgeClass}">${statusText}</span>
+                        </div>
+                        ${nodesHtml}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ============ Nodes ============
+        async function loadNodes() {
+            try {
+                const res = await fetch('/api/nodes');
+                const data = await res.json();
+                renderNodes(data.nodes || []);
+            } catch (err) {
+                console.error('loadNodes:', err);
+            }
+        }
+
+        function renderNodes(nodes) {
+            const container = document.getElementById('nodeList');
+            document.getElementById('nodeCount').textContent = nodes.length;
+
+            if (nodes.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="padding:20px"><span style="color:var(--text-muted);font-size:0.85rem">还没有添加节点</span></div>';
+                return;
+            }
+
+            container.innerHTML = nodes.map(n => {
+                const statusClass = n.status === 'online' ? 'online' : n.status === 'offline' ? 'offline' : 'unknown';
+                const typeLabels = { full: '上下', download: '下载', upload: '上传' };
+                return `
+                    <div class="node-item">
+                        <div class="node-left">
+                            <span class="dot ${statusClass}"></span>
+                            <strong class="name">${escapeHtml(n.name || n.id)}</strong>
+                            <span class="node-type-tag ${n.node_type || 'full'}">${typeLabels[n.node_type] || n.node_type}</span>
+                            <span class="host-info">${escapeHtml(n.host)}:${n.port}</span>
+                        </div>
+                        <button class="btn btn-danger btn-sm" onclick="removeNode('${escapeAttr(n.id)}')">删除</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function removeNode(nodeId) {
+            if (!confirm(`确定删除节点 ${nodeId}？`)) return;
+            try {
+                const res = await fetch('/api/node/remove', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ node_id: nodeId })
+                });
+                const data = await res.json();
+                if (data.status === 'removed') loadNodes();
+            } catch (err) {
+                alert('删除失败: ' + err.message);
+            }
+        }
+
+        // ============ Utils ============
+        function formatSize(bytes) {
+            if (!bytes || bytes === 0) return '';
+            const u = ['B','KB','MB','GB','TB']; let i = 0; let s = bytes;
+            while (s >= 1024 && i < u.length-1) { s /= 1024; i++; }
+            return s.toFixed(1) + ' ' + u[i];
+        }
+
+        function escapeHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+        function escapeAttr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+venv/
+data/allfiledown.db*
+data/events.db*
+config.json
+*.egg-info/
+dist/
+.env

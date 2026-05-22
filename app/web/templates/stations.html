@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+{% block title %}节点概览{% endblock %}
+{% block logo_subtitle %}节点概览{% endblock %}
+{% block nav_stations_class %}active{% endblock %}
+{% block head_styles %}
+        :root {
+            --green-muted: rgba(34,197,94,0.08);
+            --red-muted: rgba(239,68,68,0.08);
+            --yellow-muted: rgba(234,179,8,0.08);
+            --blue-muted: rgba(59,130,246,0.08);
+            --purple-muted: rgba(139,92,246,0.08);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: var(--space-lg);
+            margin-top: 4px;
+        }
+
+        .station-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            transition: all var(--transition-base);
+        }
+        .station-card:hover { border-color: var(--border-color-hover); }
+
+        .station-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md) var(--space-lg);
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-elevated);
+        }
+        .station-head-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .station-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+        .station-tag {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: var(--radius-full);
+            font-weight: 500;
+        }
+        .station-tag {
+            background: var(--bg-surface-alt);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+        .station-host {
+            font-size: 0.72rem;
+            color: var(--text-tertiary);
+            font-family: var(--font-mono);
+        }
+
+        .station-status {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.78rem;
+            white-space: nowrap;
+        }
+
+        .station-body {
+            padding: var(--space-md) var(--space-lg);
+        }
+
+        /* Speed gauges */
+        .speed-row {
+            display: flex;
+            gap: var(--space-md);
+            margin-bottom: var(--space-md);
+        }
+        .speed-gauge {
+            flex: 1;
+            background: var(--bg-elevated);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+        .speed-gauge .speed-label {
+            font-size: 0.7rem;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        .speed-gauge .speed-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+        .speed-gauge .speed-value.down { color: var(--accent); }
+        .speed-gauge .speed-value.up { color: var(--green); }
+
+        /* Stat chips */
+        .stat-chips {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: var(--space-md);
+        }
+        .stat-chip {
+            padding: 4px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 0.76rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .stat-chip.downloading { background: var(--blue-muted); color: var(--accent); border: 1px solid rgba(59,130,246,0.2); }
+        .stat-chip.paused { background: var(--yellow-muted); color: var(--yellow); border: 1px solid rgba(234,179,8,0.2); }
+        .stat-chip.completed { background: var(--green-muted); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
+        .stat-chip.failed { background: var(--red-muted); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+        .stat-chip.pending { background: var(--purple-muted); color: #a78bfa; border: 1px solid rgba(139,92,246,0.2); }
+        .stat-chip.total { background: transparent; color: var(--text-tertiary); border: 1px solid var(--border-color); }
+
+        /* Active task mini list */
+        .active-tasks {
+            border-top: 1px solid var(--border-color);
+            padding-top: var(--space-sm);
+        }
+        .active-tasks-title {
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .active-task-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+            font-size: 0.78rem;
+        }
+        .active-task-item .task-filename {
+            flex: 1;
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .active-task-item .task-mini-progress {
+            width: 60px;
+            height: 4px;
+            background: var(--bg-elevated);
+            border-radius: 2px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        .active-task-item .task-mini-bar {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 1s ease;
+        }
+        .active-task-item .task-mini-status {
+            font-size: 0.7rem;
+            color: var(--text-tertiary);
+            width: 36px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+        .active-task-item .task-gid {
+            font-size: 0.65rem;
+            color: var(--text-tertiary);
+            font-family: var(--font-mono);
+            flex-shrink: 0;
+        }
+
+        .empty-tasks {
+            font-size: 0.78rem;
+            color: var(--text-tertiary);
+            text-align: center;
+            padding: 16px;
+        }
+
+        .station-footer {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            padding: var(--space-sm) var(--space-lg) var(--space-md);
+        }
+        .station-footer .btn-station {
+            padding: 6px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-color);
+            text-decoration: none;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+        .station-footer .btn-station:hover {
+            background: var(--bg-surface-hover);
+            border-color: var(--border-color-hover);
+            color: var(--text-primary);
+        }
+
+        /* Aria2 global stats row */
+        .global-bar {
+            display: flex;
+            gap: var(--space-md);
+            margin-bottom: var(--space-lg);
+            flex-wrap: wrap;
+        }
+        .global-stat-card {
+            flex: 1;
+            min-width: 120px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .global-stat-card .icon {
+            font-size: 1.5rem;
+            width: 36px;
+            text-align: center;
+        }
+        .global-stat-card .info {
+            flex: 1;
+        }
+        .global-stat-card .info .num {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+        }
+        .global-stat-card .info .label {
+            font-size: 0.7rem;
+            color: var(--text-tertiary);
+        }
+
+        @media (max-width: 699px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .speed-row {
+                flex-direction: row;
+            }
+            .global-bar {
+                flex-direction: column;
+            }
+        }
+    </style>
+{% endblock %}
+{% block content %}
+        <!-- Global Status Bar -->
+        <div class="global-bar" id="globalBar">
+            <div class="global-stat-card">
+                <span class="icon">📥</span>
+                <div class="info">
+                    <div class="num" id="globalDownSpeed">0 B/s</div>
+                    <div class="label">下载速度</div>
+                </div>
+            </div>
+            <div class="global-stat-card">
+                <span class="icon">📤</span>
+                <div class="info">
+                    <div class="num" id="globalUpSpeed">0 B/s</div>
+                    <div class="label">上传速度</div>
+                </div>
+            </div>
+            <div class="global-stat-card">
+                <span class="icon">⚡</span>
+                <div class="info">
+                    <div class="num" id="globalActive">0</div>
+                    <div class="label">活动任务</div>
+                </div>
+            </div>
+            <div class="global-stat-card">
+                <span class="icon">⏳</span>
+                <div class="info">
+                    <div class="num" id="globalWaiting">0</div>
+                    <div class="label">等待中</div>
+                </div>
+            </div>
+            <div class="global-stat-card">
+                <span class="icon">✅</span>
+                <div class="info">
+                    <div class="num" id="globalStopped">0</div>
+                    <div class="label">已完成</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="stationContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <div>加载节点数据...</div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block extra_scripts %}
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStations();
+            setInterval(loadStations, 5000);
+        });
+
+        async function loadStations() {
+            try {
+                const res = await fetch('/api/stations');
+                const data = await res.json();
+                render(data.stations || [], data);
+            } catch (err) {
+                document.getElementById('stationContent').innerHTML = `
+                    <div class="empty-state">
+                        <span class="emoji">❌</span>
+                        <h3>加载失败</h3>
+                        <p>${esc(err.message)}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function render(stations, data) {
+            // Global bar — use first local node's speed
+            const localStation = stations.find(s => s.is_local && s.speed);
+            if (localStation) {
+                document.getElementById('globalDownSpeed').textContent = fmtSpeed(localStation.speed.download);
+                document.getElementById('globalUpSpeed').textContent = fmtSpeed(localStation.speed.upload);
+                document.getElementById('globalActive').textContent = localStation.speed.active;
+                document.getElementById('globalWaiting').textContent = localStation.speed.waiting;
+                document.getElementById('globalStopped').textContent = localStation.speed.stopped;
+            }
+
+            const container = document.getElementById('stationContent');
+            if (stations.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <span class="emoji">📡</span>
+                        <h3>还没有添加节点</h3>
+                        <p>去设置页添加第一个节点</p>
+                        <a class="btn btn-primary" style="display:inline-flex;margin-top:14px" href="/nodes">⚙️ 添加节点</a>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="stats-grid">
+                    ${stations.map(s => renderStation(s)).join('')}
+                </div>
+            `;
+        }
+
+        function renderStation(s) {
+            const typeLabels = { full: '上下', download: '下载', upload: '上传' };
+            const statusDot = s.status === 'online' ? '<span class="dot green" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0"></span>' :
+                s.status === 'offline' ? '<span class="dot red" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0"></span>' :
+                '<span class="dot gray" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;flex-shrink:0"></span>';
+            const statusText = s.status === 'online' ? '在线' : s.status === 'offline' ? '离线' : '未知';
+            const tag = '<span class="station-tag">' + (s.is_local ? '本机' : '远程') + '</span>';
+            const st = s.stats || {};
+
+            // Speed gauges (show for all nodes)
+            const downSpeed = fmtSpeed(s.speed ? s.speed.download : 0);
+            const upSpeed = fmtSpeed(s.speed ? s.speed.upload : 0);
+            const speedHtml = `
+                <div class="speed-row">
+                    <div class="speed-gauge">
+                        <div class="speed-label">↓ 下载</div>
+                        <div class="speed-value down">${downSpeed}</div>
+                    </div>
+                    <div class="speed-gauge">
+                        <div class="speed-label">↑ 上传</div>
+                        <div class="speed-value up">${upSpeed}</div>
+                    </div>
+                </div>
+            `;
+
+            // Stat chips
+            const chips = [
+                { label: '下载中', count: st.downloading, cls: 'downloading' },
+                { label: '等待', count: st.pending, cls: 'pending' },
+                { label: '暂停', count: st.paused, cls: 'paused' },
+                { label: '完成', count: st.completed, cls: 'completed' },
+                { label: '失败', count: st.failed, cls: 'failed' },
+                { label: '总计', count: st.total, cls: 'total' },
+            ].filter(c => c.count > 0);
+
+            // Active tasks
+            let tasksHtml = '';
+            if (s.active_tasks && s.active_tasks.length) {
+                tasksHtml = `<div class="active-tasks">
+                    <div class="active-tasks-title">⚡ 活动任务 (${s.active_tasks.length})</div>
+                    ${s.active_tasks.map(t => {
+                        const pct = Math.round((t.progress || 0) * 100);
+                        const barColor = t.status === 'paused' ? 'var(--yellow)' : t.status === 'downloading' ? 'var(--accent)' : 'var(--green)';
+                        const statusMap = {downloading:'↓',paused:'⏸',pending:'⏳',seeding:'🌱'};
+                        return `<div class="active-task-item">
+                            <span class="task-filename" title="${esc(t.filename)}">${esc(t.filename)}</span>
+                            <div class="task-mini-progress">
+                                <div class="task-mini-bar" style="width:${pct}%;background:${barColor}"></div>
+                            </div>
+                            <span class="task-mini-status">${statusMap[t.status] || t.status}</span>
+                            ${t.gid ? `<span class="task-gid">${t.gid.slice(0,6)}</span>` : ''}
+                        </div>`;
+                    }).join('')}
+                </div>`;
+            } else {
+                tasksHtml = '<div class="active-tasks"><div class="empty-tasks">暂无活动任务</div></div>';
+            }
+
+            // Footer buttons
+            const filesUrl = s.is_local ? '/' : `http://${s.host}:${s.port}/`;
+            const tasksUrl = s.is_local ? '/downloads' : `http://${s.host}:${s.port}/downloads`;
+
+            return `
+                <div class="station-card">
+                    <div class="station-head">
+                        <div class="station-head-left">
+                            ${statusDot}
+                            <div>
+                                <div style="display:flex;align-items:center;gap:6px">
+                                    <span class="station-name">${esc(s.name)}</span>
+                                    ${tag}
+                                </div>
+                                <div class="station-host">${esc(s.host)}:${s.port} · ${typeLabels[s.node_type] || s.node_type}</div>
+                            </div>
+                        </div>
+                        <div class="station-status">
+                            <span style="color:${s.status === 'online' ? 'var(--green)' : s.status === 'offline' ? 'var(--red)' : 'var(--text-tertiary)'}">${statusText}</span>
+                        </div>
+                    </div>
+                    <div class="station-body">
+                        ${speedHtml}
+                        <div class="stat-chips">
+                            ${chips.length ? chips.map(c => `<span class="stat-chip ${c.cls}">${c.label} ${c.count}</span>`).join('') : '<span class="stat-chip total">暂无任务数据</span>'}
+                        </div>
+                        ${tasksHtml}
+                    </div>
+                    <div class="station-footer">
+                        <a class="btn-station" href="${filesUrl}" ${s.is_local ? '' : 'target="_blank"'}>📂 文件</a>
+                        <a class="btn-station" href="${tasksUrl}" ${s.is_local ? '' : 'target="_blank"'}>📥 任务</a>
+                    </div>
+                </div>
+            `;
+        }
+
+        function fmtSpeed(bytes) {
+            if (!bytes || bytes === 0) return '0 B/s';
+            const u = ['B/s','KB/s','MB/s','GB/s'];
+            let i = 0, s = bytes;
+            while (s >= 1024 && i < u.length-1) { s /= 1024; i++; }
+            return s.toFixed(1) + ' ' + u[i];
+        }
+
+        function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;') : ''; }
+    </script>
+{% endblock %}
