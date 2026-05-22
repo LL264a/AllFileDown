@@ -558,28 +558,74 @@ async def get_stations():
     for n in nodes:
         node_id = n["id"]
         is_local = node_id == local_node_id
-
-        # 任务统计
-        task_counts = db.execute("""
-            SELECT tn.status, COUNT(*) as cnt
-            FROM task_nodes tn WHERE tn.node_id = ?
-            GROUP BY tn.status
-        """, (node_id,)).fetchall()
-
-        status_map = {}
-        for r in task_counts:
-            status_map[r["status"]] = r["cnt"]
-
-        active_tasks = db.execute("""
-            SELECT t.id, t.filename, t.url, tn.progress, tn.status, tn.gid
-            FROM task_nodes tn
-            JOIN tasks t ON tn.task_id = t.id
-            WHERE tn.node_id = ? AND tn.status IN ('downloading', 'pending', 'paused')
-            ORDER BY t.created_at DESC
-            LIMIT 20
-        """, (node_id,)).fetchall()
-
         checked_status = node_status_map.get(node_id, n.get("status", "unknown"))
+
+        # 对远程在线节点，拉取真实任务数据
+        remote_tasks_data = None
+        if not is_local and checked_status == "online":
+            host = n.get("host", "")
+            port = n.get("port", 18790)
+            auth_token = n.get("auth_token", "")
+            try:
+                async with aiohttp.ClientSession() as session:
+                    headers = {"X-Auth-Token": auth_token} if auth_token else {}
+                    async with session.get(f"http://{host}:{port}/api/task/status",
+                                            ssl=ssl_ctx, timeout=aiohttp.ClientTimeout(total=5),
+                                            headers=headers) as resp:
+                        if resp.status == 200:
+                            remote_tasks_data = await resp.json()
+            except Exception:
+                pass
+
+        # 任务统计 — 优先用远程真实数据
+        if remote_tasks_data and isinstance(remote_tasks_data, dict) and "tasks" in remote_tasks_data:
+            tasks_list = remote_tasks_data["tasks"]
+            status_map = {"downloading": 0, "pending": 0, "paused": 0,
+                          "seeding": 0, "completed": 0, "failed": 0, "cancelled": 0}
+            active_tasks_raw = []
+            for t in tasks_list:
+                st = t.get("status", "unknown")
+                if st == "all_completed":
+                    status_map["completed"] = status_map.get("completed", 0) + 1
+                elif st in status_map:
+                    status_map[st] = status_map.get(st, 0) + 1
+                else:
+                    status_map[st] = status_map.get(st, 0) + 1
+
+                # 收集活跃任务
+                is_active = st in ("downloading", "pending", "paused")
+                if is_active or (st == "all_completed" and len(active_tasks_raw) < 5):
+                    active_tasks_raw.append({
+                        "id": t["id"],
+                        "filename": t.get("filename") or t["url"].split("/")[-1] or t["id"],
+                        "progress": (t.get("nodes") or [{}])[0].get("progress", 0) if t.get("nodes") else 0,
+                        "status": st,
+                        "gid": (t.get("nodes") or [{}])[0].get("gid", "") if t.get("nodes") else "",
+                    })
+
+            # 也更新本机 DB 中的节点状态
+            db.execute("UPDATE nodes SET last_seen = datetime('now') WHERE id = ?", (node_id,))
+
+        else:
+            # 降级到本地 DB 数据
+            task_counts = db.execute("""
+                SELECT tn.status, COUNT(*) as cnt
+                FROM task_nodes tn WHERE tn.node_id = ?
+                GROUP BY tn.status
+            """, (node_id,)).fetchall()
+
+            status_map = {}
+            for r in task_counts:
+                status_map[r["status"]] = r["cnt"]
+
+            active_tasks_raw = db.execute("""
+                SELECT t.id, t.filename, t.url, tn.progress, tn.status, tn.gid
+                FROM task_nodes tn
+                JOIN tasks t ON tn.task_id = t.id
+                WHERE tn.node_id = ? AND tn.status IN ('downloading', 'pending', 'paused')
+                ORDER BY t.created_at DESC
+                LIMIT 20
+            """, (node_id,)).fetchall()
         station = {
             "id": node_id,
             "name": n.get("name", node_id),
@@ -611,7 +657,7 @@ async def get_stations():
                 "progress": t["progress"] or 0,
                 "status": t["status"],
                 "gid": t["gid"],
-            } for t in active_tasks],
+            } for t in active_tasks_raw],
         }
         stations.append(station)
 

@@ -6,3 +6,23 @@
 2026-05-22 14:31:38 [INFO] File server running on :18791
 2026-05-22 14:31:47 [INFO] 127.0.0.1 [22/May/2026:14:31:47 +0800] "GET /health HTTP/1.1" 200 189 "-" "curl/8.5.0"
 2026-05-22 14:32:04 [INFO] File download: task=5f0d10ef-edd file=frp_0.68.1_linux_arm64.tar.gz
+2026-05-23 01:21:10 [INFO] ==================================================
+2026-05-23 01:21:10 [INFO] 🚀 AFD starting...
+2026-05-23 01:21:11 [INFO] File server started on port 18791
+2026-05-23 01:21:11 [INFO] File server running on :18791
+2026-05-23 01:21:20 [INFO] 127.0.0.1 [23/May/2026:01:21:20 +0800] "GET /health HTTP/1.1" 200 189 "-" "curl/8.5.0"
+2026-05-23 01:21:29 [INFO] 127.0.0.1 [23/May/2026:01:21:29 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz HTTP/1.1" 200 12512587 "-" "curl/8.5.0"
+2026-05-23 01:21:44 [INFO] 127.0.0.1 [23/May/2026:01:21:44 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz HTTP/1.1" 200 12512587 "-" "curl/8.5.0"
+2026-05-23 01:21:55 [INFO] 127.0.0.1 [23/May/2026:01:21:55 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz?token=allfiledown-default-token HTTP/1.1" 200 12512587 "-" "curl/8.5.0"
+2026-05-23 01:22:14 [INFO] 127.0.0.1 [23/May/2026:01:22:06 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz?token=allfiledown-default-token HTTP/1.1" 200 0 "-" "curl/8.5.0"
+2026-05-23 01:22:17 [INFO] 127.0.0.1 [23/May/2026:01:22:17 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz?token=allfiledown-default-token HTTP/1.1" 200 12512606 "-" "curl/8.5.0"
+2026-05-23 01:22:52 [INFO] 127.0.0.1 [23/May/2026:01:22:52 +0800] "GET /health HTTP/1.1" 200 189 "-" "curl/8.5.0"
+2026-05-23 01:22:52 [INFO] 127.0.0.1 [23/May/2026:01:22:52 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz?token=allfiledown-default-token HTTP/1.1" 200 12512606 "-" "curl/8.5.0"
+2026-05-23 01:22:53 [INFO] 127.0.0.1 [23/May/2026:01:22:53 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz HTTP/1.1" 200 12512606 "-" "curl/8.5.0"
+2026-05-23 01:23:26 [INFO] ==================================================
+2026-05-23 01:23:26 [INFO] 🚀 AFD starting...
+2026-05-23 01:23:27 [INFO] File server started on port 18791
+2026-05-23 01:23:27 [INFO] File server running on :18791
+2026-05-23 01:23:30 [INFO] 127.0.0.1 [23/May/2026:01:23:30 +0800] "GET /health HTTP/1.1" 200 189 "-" "curl/8.5.0"
+2026-05-23 01:24:11 [INFO] 127.0.0.1 [23/May/2026:01:24:11 +0800] "GET /health HTTP/1.1" 200 189 "-" "curl/8.5.0"
+2026-05-23 01:24:11 [INFO] 127.0.0.1 [23/May/2026:01:24:11 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz?token=allfiledown-default-token HTTP/1.1" 200 12512606 "-" "curl/8.5.0"

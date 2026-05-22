@@ -185,7 +185,7 @@ class Orchestrator:
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
-        # 记录源信息（即使还没下载，以后用）
+        # 记录源信息到文件服务器节点（源节点ID），不是本机
         db.execute(
             "UPDATE task_nodes SET internal_url = ? WHERE task_id = ? AND node_id = ?",
             (internal_url, task_id, source_node_id)
@@ -238,14 +238,26 @@ class Orchestrator:
                                     "UPDATE tasks SET status = 'completed' WHERE id = ?",
                                     (row["task_id"],)
                                 )
-                                db.commit()
                                 logger.info(f"Task {row['task_id']}: download completed, path={local_path}")
                                 add_event(row["task_id"], config["node_id"], "download_completed",
                                           json.dumps({"path": local_path}))
 
                             db.commit()
                     except Exception as e:
-                        logger.warning(f"Status poll error for gid={row['gid']}: {e}")
+                        # 如果 GID 已被 aria2 移除（下载完成后自动清理），标记状态
+                        if "aria2 RPC error" in str(e) or "not found" in str(e).lower():
+                            logger.info(f"GID {row['gid']} no longer in aria2, marking as complete")
+                            db.execute(
+                                "UPDATE task_nodes SET status = 'complete', progress = 1.0 WHERE task_id = ? AND node_id = ?",
+                                (row["task_id"], config["node_id"])
+                            )
+                            db.execute(
+                                "UPDATE tasks SET status = 'completed' WHERE id = ?",
+                                (row["task_id"],)
+                            )
+                            db.commit()
+                        else:
+                            logger.warning(f"Status poll error for gid={row['gid']}: {e}")
 
             except Exception:
                 pass
@@ -271,7 +283,9 @@ class Orchestrator:
                         public_host = config.get('host', 'localhost')
                         # avoid binding to 0.0.0.0 or localhost in URLs
                         if public_host in ('0.0.0.0', '127.0.0.1', 'localhost'):
-                            public_host = 'localhost'
+                            public_host = config.get('peer_host', config.get('host'))
+                            if public_host in ('0.0.0.0', '127.0.0.1', 'localhost'):
+                                public_host = 'localhost'
                         internal_url = f"http://{public_host}:{config.get('file_server_port', 18791)}/tasks/{row['task_id']}/{filename}"
                         if config.get("auth_token"):
                             internal_url += f"?token={config['auth_token']}"
@@ -449,7 +463,7 @@ class Orchestrator:
                     "node_name": n["node_name"] or n["node_id"],
                     "node_type": n["node_type"] or "full",
                     "progress": n["progress"],
-                    "download_speed": int(n["download_speed"]) if "download_speed" in n.keys() else 0,
+                    "download_speed": n["download_speed"] if n["download_speed"] else 0,
                     "status": n["status"],
                     "internal_url": n["internal_url"],
                     "gid": n["gid"]
@@ -494,7 +508,7 @@ class Orchestrator:
             "node_name": n["node_name"] or n["node_id"],
             "node_type": n["node_type"] or "full",
             "progress": n["progress"],
-            "download_speed": int(n["download_speed"]) if "download_speed" in n.keys() else 0,
+            "download_speed": n["download_speed"] if n["download_speed"] else 0,
             "status": n["status"],
             "internal_url": n["internal_url"],
             "local_path": n["local_path"],
