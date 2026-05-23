@@ -11,8 +11,11 @@ from pathlib import Path
 from typing import Any
 
 import aiohttp
-from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+import hashlib
+import hmac
+import secrets
+from fastapi import APIRouter, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import config, save_config
@@ -24,6 +27,47 @@ router: APIRouter = APIRouter()
 templates: Jinja2Templates = Jinja2Templates(
     directory=str(Path(__file__).parent / "templates"),
 )
+
+
+# ── Auth helpers ──
+_AUTH_COOKIE = "afd_session"
+
+
+def _make_session_token() -> str:
+    return secrets.token_hex(32)
+
+
+def _verify_password(input_pw: str, stored_pw: str) -> bool:
+    """简单的密码验证，不存 hash（可后期升级）"""
+    return input_pw == stored_pw
+
+
+def _check_auth(request: Request) -> bool:
+    """检查是否已登录"""
+    pw: str = str(config.get("web_password", ""))
+    if not pw:
+        return True  # 无密码时不验证
+    # Cookie 验证
+    token: str = request.cookies.get(_AUTH_COOKIE, "")
+    if token:
+        expected: str = hashlib.sha256((pw + "_afd_session").encode()).hexdigest()
+        if hmac.compare_digest(token, expected):
+            return True
+    # afd_token cookie（前端 login 写入）
+    afd_token: str = request.cookies.get("afd_token", "")
+    if afd_token:
+        expected: str = hashlib.sha256((pw + "_afd_session").encode()).hexdigest()
+        if hmac.compare_digest(afd_token, expected):
+            return True
+    # Header/body token 验证（API调用、记住密码）
+    body_token: str = request.headers.get("X-Auth-Token", "")
+    if body_token and hmac.compare_digest(body_token, hashlib.sha256(pw.encode()).hexdigest()):
+        return True
+    return False
+
+
+def _login_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/login", status_code=302)
 
 
 def _format_file_size(bytes_val: int | None) -> str:
@@ -49,8 +93,80 @@ def _resolve_public_host(host: str) -> str:
 # ---- 页面路由 ----
 
 
+# ---- Auth 路由 ----
+
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request) -> HTMLResponse:
+    """登录页"""
+    return templates.TemplateResponse(request, "login.html", {})
+
+
+@router.post("/api/auth/login")
+async def api_auth_login(request: Request) -> dict[str, Any]:
+    """登录验证"""
+    data: dict[str, Any] = await request.json()
+    username: str = data.get("username", "admin")
+    password: str = data.get("password", "")
+    stored_pw: str = str(config.get("web_password", ""))
+
+    if not stored_pw:
+        return {"authenticated": True, "redirect": "/"}
+
+    if _verify_password(password, stored_pw):
+        return {"authenticated": True, "redirect": "/"}
+    return {"authenticated": False, "error": "用户名或密码错误"}
+
+
+@router.post("/api/auth/verify")
+async def api_auth_verify(request: Request) -> dict[str, Any]:
+    """验证已保存的凭据（记住密码时使用）"""
+    if _check_auth(request):
+        return {"authenticated": True, "redirect": "/"}
+    data: dict[str, Any] = await request.json()
+    stored_pw: str = str(config.get("web_password", ""))
+    pw: str = data.get("password", "")
+    if stored_pw and _verify_password(pw, stored_pw):
+        return {"authenticated": True, "redirect": "/"}
+    return {"authenticated": False}
+
+
+@router.post("/api/auth/session")
+async def api_auth_session(request: Request) -> dict[str, Any]:
+    """登录后设置 session cookie（持久化登录状态）"""
+    data: dict[str, Any] = await request.json()
+    pw: str = data.get("password", "")
+    stored_pw: str = str(config.get("web_password", ""))
+    if stored_pw and _verify_password(pw, stored_pw):
+        token: str = hashlib.sha256((stored_pw + "_afd_session").encode()).hexdigest()
+        # 通过 Response 设置 cookie — FastAPI 的 JSONResponse 不支持直接 Set-Cookie
+        # 所以返回 token 让客户端设 cookie
+        return {"authenticated": True, "token": token}
+    return {"authenticated": False}
+
+
+# ---- 受保护页面路由 ----
+
+
+def _protect(request: Request) -> HTMLResponse | None:
+    """检查登录，未登录返回重定向"""
+    pw: str = str(config.get("web_password", ""))
+    if pw and not _check_auth(request):
+        # 检查 sessionStorage/localStorage token 通过 header 传递
+        auth_header: str = request.headers.get("X-Auth-Token", "")
+        if auth_header:
+            expected: str = hashlib.sha256(pw.encode()).hexdigest()
+            if hmac.compare_digest(auth_header, expected):
+                return None
+        return _login_redirect()
+    return None
+
+
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
+    r = _protect(request)
+    if r:
+        return r
     return templates.TemplateResponse(
         request,
         "files.html",
@@ -61,13 +177,38 @@ async def index(request: Request) -> HTMLResponse:
     )
 
 
+@router.get("/test-ui", response_class=HTMLResponse)
+@router.get("/test-ui/{full_path:path}", response_class=HTMLResponse)
+async def test_ui_page(request: Request) -> HTMLResponse:
+    """UI 优化测试页（直接输出，避免 Jinja2 处理 JS 模板字面量）"""
+    tmpl_dir = Path(__file__).parent / "templates" / "test-ui"
+    tmpl_file = tmpl_dir / "test.html"
+    if tmpl_file.exists():
+        content = tmpl_file.read_text(encoding="utf-8")
+        return HTMLResponse(content=content)
+    return HTMLResponse(content="<h1>404 - 测试页面未找到</h1>", status_code=404)
+
+
 @router.get("/health")
 async def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
+
+
+
+
+
+
+
+
+
+
 @router.get("/downloads", response_class=HTMLResponse)
 async def downloads_page(request: Request) -> HTMLResponse:
+    r = _protect(request)
+    if r:
+        return r
     return templates.TemplateResponse(
         request,
         "downloads.html",
@@ -80,6 +221,9 @@ async def downloads_page(request: Request) -> HTMLResponse:
 
 @router.get("/nodes", response_class=HTMLResponse)
 async def nodes_page(request: Request) -> HTMLResponse:
+    r = _protect(request)
+    if r:
+        return r
     return templates.TemplateResponse(
         request,
         "nodes.html",
@@ -93,6 +237,9 @@ async def nodes_page(request: Request) -> HTMLResponse:
 
 @router.get("/stations", response_class=HTMLResponse)
 async def stations_page(request: Request) -> HTMLResponse:
+    r = _protect(request)
+    if r:
+        return r
     return templates.TemplateResponse(
         request,
         "stations.html",

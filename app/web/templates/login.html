@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>AFD · 登录</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-page)}
+        .login-box{width:100%;max-width:380px;padding:20px}
+        .login-card{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:36px 28px 28px;box-shadow:var(--shadow-lg)}
+        .login-logo{text-align:center;margin-bottom:24px}
+        .login-logo h1{font-size:1.5rem;font-weight:700;color:var(--text-primary)}
+        .login-logo p{font-size:.82rem;color:var(--text-tertiary);margin-top:6px}
+        .login-form{display:flex;flex-direction:column;gap:12px}
+        .login-form label{font-size:.82rem;font-weight:600;color:var(--text-secondary)}
+        .login-form .input{width:100%;padding:10px 14px;font-size:.92rem}
+        .login-remember{display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--text-secondary)}
+        .login-remember input[type="checkbox"]{accent-color:var(--accent);width:16px;height:16px}
+        .login-btn{width:100%;padding:10px;font-size:.92rem;margin-top:4px}
+        .login-error{font-size:.82rem;color:var(--red);text-align:center;display:none;padding:8px;background:var(--bg-danger);border-radius:var(--radius-sm);margin-bottom:12px}
+        @media(max-width:480px){.login-box{padding:12px}}
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <div class="login-card">
+            <div class="login-logo">
+                <h1>⚔️ AFD</h1>
+                <p>Allfiledown · 文件下载管理</p>
+            </div>
+            <div class="login-error" id="loginError"></div>
+            <form class="login-form" id="loginForm" onsubmit="return doLogin(event)">
+                <label for="username">用户名</label>
+                <input class="input" id="username" type="text" placeholder="admin" autocomplete="username">
+                <label for="password">密码</label>
+                <input class="input" id="password" type="password" placeholder="输入密码" autocomplete="current-password">
+                <label class="login-remember">
+                    <input type="checkbox" id="rememberMe" checked> 记住密码
+                </label>
+                <button class="btn btn-primary login-btn" type="submit">🔓 登录</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        (function(){
+            // 登录页自动继承已保存的 session cookie，无需额外操作
+            const saved = localStorage.getItem('afd_auth');
+            if (saved) {
+                try {
+                    const creds = JSON.parse(saved);
+                    fetch('/api/auth/session', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(creds)})
+                    .then(r => r.json())
+                    .then(d => { if (d.authenticated) window.location.href = d.redirect || '/'; })
+                    .catch(e => {});
+                } catch(e) {}
+            }
+        })();
+
+        async function doLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim() || 'admin';
+            const password = document.getElementById('password').value.trim();
+            const remember = document.getElementById('rememberMe').checked;
+            const errorEl = document.getElementById('loginError');
+
+            if (!password) {
+                errorEl.textContent = '请输入密码';
+                errorEl.style.display = 'block';
+                return false;
+            }
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({username, password, remember})
+                });
+                const data = await res.json();
+                if (data.authenticated) {
+                    if (remember) {
+                        localStorage.setItem('afd_auth', JSON.stringify({username, password}));
+                    } else {
+                        sessionStorage.setItem('afd_auth', JSON.stringify({username, password}));
+                    }
+                    // 设置持久化 cookie（X-Auth-Token）
+                    fetch('/api/auth/session', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username, password})})
+                    .then(r => r.json())
+                    .then(sd => {
+                        if (sd.authenticated && sd.token) {
+                            document.cookie = 'afd_token=' + sd.token + ';path=/;max-age=' + (remember ? 86400*30 : 86400);
+                            document.cookie = 'afd_auth=1;path=/;max-age=' + (remember ? 86400*30 : 86400);
+                        }
+                    });
+                    window.location.href = data.redirect || '/';
+                } else {
+                    errorEl.textContent = data.error || '用户名或密码错误';
+                    errorEl.style.display = 'block';
+                }
+            } catch(err) {
+                errorEl.textContent = '登录失败: ' + err.message;
+                errorEl.style.display = 'block';
+            }
+            return false;
+        }
+    </script>
+</body>
+</html>

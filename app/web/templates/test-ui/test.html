@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>AFD · UI 优化测试</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* ========== Themes ========== */
+        html[data-theme="light"] {
+            --bg-page: #ffffff;
+            --bg-surface: #f6f8fa;
+            --bg-surface-alt: #e1e4e8;
+            --bg-surface-hover: #f0f2f5;
+            --bg-elevated: #ffffff;
+            --bg-elevated-hover: #f3f4f6;
+            --bg-input: #ffffff;
+            --bg-overlay: rgba(27, 31, 36, 0.6);
+            --bg-code: #f6f8fa;
+            --bg-success: rgba(34, 197, 94, 0.08);
+            --bg-danger: rgba(239, 68, 68, 0.08);
+            --bg-warning: rgba(234, 179, 8, 0.08);
+            --bg-accent: rgba(59, 130, 246, 0.06);
+            --border-color: #d1d9e0;
+            --border-color-hover: #b7c0cc;
+            --border-color-focus: #0969da;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --text-tertiary: #8b949e;
+            --text-muted: #d0d7de;
+            --text-link: #0969da;
+            --accent: #0969da;
+            --accent-hover: #0550ae;
+            --accent-dim: rgba(9, 105, 218, 0.08);
+            --accent-glow: 0 0 12px rgba(9, 105, 218, 0.15);
+        }
+
+        /* ========== Animations ========== */
+        .page-view { animation: pageFadeIn 0.25s ease forwards; }
+        @keyframes pageFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes sheetUp { from { transform: translateY(20px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ========== Skeleton ========== */
+        .skeleton-wrap { display: none; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-surface); overflow: hidden; }
+        .skeleton-wrap.active { display: block; }
+        .skeleton-header { display: flex; align-items: center; padding: 10px 16px; background: var(--bg-surface-alt); border-bottom: 1px solid var(--border-color); gap: 8px; }
+        .skeleton-row { display: flex; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border-color); gap: 12px; }
+        .skeleton-row:last-child { border-bottom: none; }
+        .skeleton-shimmer { background: linear-gradient(90deg, var(--bg-surface-alt) 25%, var(--bg-surface-hover) 50%, var(--bg-surface-alt) 75%); background-size: 200% 100%; animation: shimmer 1.5s ease infinite; border-radius: var(--radius-sm); }
+        .skeleton-row .s-cell-check { width: 16px; height: 14px; flex-shrink: 0; }
+        .skeleton-row .s-cell-icon { width: 20px; height: 16px; flex-shrink: 0; }
+        .skeleton-row .s-cell-name { height: 14px; flex: 1; }
+        .skeleton-row .s-cell-size { width: 60px; height: 14px; flex-shrink: 0; }
+        .skeleton-row .s-cell-time { width: 60px; height: 14px; flex-shrink: 0; }
+        .skeleton-row .s-cell-actions { width: 130px; height: 28px; flex-shrink: 0; }
+
+        /* ========== File row hover ========== */
+        .gh-file-row { position: relative; transition: background var(--transition-fast), box-shadow var(--transition-fast); }
+        .gh-file-row:hover { background: var(--bg-surface-hover); box-shadow: inset 2px 0 0 var(--accent); }
+        .gh-file-row .row-actions .btn-row { transition: all var(--transition-fast); opacity: 0.2; }
+        .gh-file-row:hover .row-actions .btn-row { opacity: 0.7; }
+
+        /* ========== Global progress bar ========== */
+        .global-progress-bar { position: fixed; top: 0; left: 0; width: 100%; height: 2px; z-index: 9999; background: transparent; pointer-events: none; transition: opacity 0.3s ease; }
+        .global-progress-bar .gp-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #79c0ff); transition: width 0.5s ease; border-radius: 0 2px 2px 0; }
+
+        /* ========== Nav labels ========== */
+        .topbar-nav a { gap: 6px; }
+        .topbar-nav a .nav-label { display: inline; font-size: 0.78rem; }
+        @media (max-width: 480px) { .topbar-nav a .nav-label { display: none; } }
+
+        /* ========== Theme toggle ========== */
+        .theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: transparent; border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-tertiary); cursor: pointer; font-size: 1rem; transition: all var(--transition-fast); }
+        .theme-toggle:hover { background: var(--bg-surface-alt); color: var(--text-primary); }
+
+        /* ========== Toast ========== */
+        .toast-float { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); font-size: 0.85rem; z-index: 9999; box-shadow: var(--shadow-lg); animation: sheetUp 0.2s ease; display: none; white-space: nowrap; }
+        .toast-float.success { border-color: var(--green); background: var(--bg-success); color: var(--green); }
+        .toast-float.error { border-color: var(--red); background: var(--bg-danger); color: var(--red); }
+
+        /* ========== Page header ========== */
+        .page-view .page-header { padding: 20px 0 14px; display: flex; align-items: center; justify-content: space-between; }
+        .page-view .page-header h1 { font-size: 1.15rem; font-weight: 700; color: var(--text-primary); }
+        .page-view .page-header h1 small { font-weight: 400; font-size: 0.8rem; color: var(--text-tertiary); margin-left: 8px; }
+
+        /* ========== Global cards ========== */
+        .global-bar { display: flex; gap: var(--space-md); margin-bottom: var(--space-lg); flex-wrap: wrap; }
+        .global-stat-card { flex: 1; min-width: 100px; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+        .global-stat-card .icon { font-size: 1.5rem; width: 36px; text-align: center; }
+        .global-stat-card .info { flex: 1; }
+        .global-stat-card .info .num { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
+        .global-stat-card .info .label { font-size: 0.7rem; color: var(--text-tertiary); }
+        .loading { padding: 60px 20px; text-align: center; color: var(--text-tertiary); }
+        .spinner { width: 24px; height: 24px; border: 2px solid var(--border-color); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+
+        /* ========== Form ========== */
+        .form-section { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-lg); margin-bottom: 16px; }
+        .form-section .form-head { padding: 14px var(--space-xl) 0; display: flex; align-items: center; justify-content: space-between; }
+        .form-section .form-head h2 { font-size: 0.88rem; font-weight: 600; color: var(--text-secondary); }
+        .form-section .form-body { padding: var(--space-lg) var(--space-xl); }
+        .form-inline { display: flex; gap: 8px; flex-wrap: wrap; }
+        .form-inline .input-url { flex: 1; min-width: 200px; }
+        @media (max-width: 640px) { .form-inline { flex-direction: column; } }
+
+        /* ========== Task items ========== */
+        .task-section { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; }
+        .task-section .task-head { padding: 14px var(--space-xl); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); }
+        .task-section .task-head h2 { font-size: 0.88rem; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+        .task-section .task-head h2 .count-badge { font-size: 0.7rem; font-weight: 500; color: var(--text-tertiary); background: var(--bg-surface-alt); padding: 1px 8px; border-radius: var(--radius-full); }
+        .task-item { padding: 14px var(--space-xl); border-bottom: 1px solid var(--border-color); transition: background var(--transition-fast); cursor: pointer; }
+        .task-item:last-child { border-bottom: none; }
+        .task-item:hover { background: var(--bg-elevated-hover); }
+        .task-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+        .task-info { flex: 1; min-width: 0; }
+        .task-info .name { font-weight: 600; color: var(--text-primary); word-break: break-all; font-size: 0.9rem; }
+        .task-info .url { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 2px; word-break: break-all; }
+        .task-status-col { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+        .task-actions { display: flex; gap: 4px; }
+        .task-action-btn { background: transparent; border: 1px solid var(--border-color); border-radius: var(--radius-sm); width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.72rem; transition: all var(--transition-fast); opacity: 0.5; color: var(--text-tertiary); }
+        .task-action-btn:hover { opacity: 1; }
+        .task-action-btn.resume:hover { color: var(--green); border-color: var(--green); }
+        .task-action-btn.pause:hover { color: var(--yellow); border-color: var(--yellow); }
+        .task-action-btn.cancel:hover { color: var(--yellow); border-color: var(--yellow); }
+        .task-action-btn.retry:hover { color: var(--accent); border-color: var(--accent); }
+        .task-action-btn.delete:hover { color: var(--red); border-color: var(--red); }
+        .task-meta-bar { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+        .meta-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; font-size: 0.72rem; color: var(--text-tertiary); background: var(--bg-surface-alt); border-radius: var(--radius-sm); }
+
+        .progress-bar-wrap { flex: 1; height: 8px; background: var(--bg-elevated); border-radius: 4px; overflow: hidden; max-width: 200px; }
+        .progress-bar { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+        .progress-bar-accent { background: var(--accent); }
+        .progress-bar-green { background: var(--green); }
+        .progress-bar-red { background: var(--red); }
+        .progress-bar-yellow { background: var(--yellow); }
+
+        .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--radius-full); font-size: 0.72rem; font-weight: 600; }
+        .badge-downloading { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-paused { background: rgba(234,179,8,0.12); color: var(--yellow); border: 1px solid rgba(234,179,8,0.25); }
+        .badge-completed { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+        .badge-failed { background: rgba(239,68,68,0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-pending { background: rgba(139,92,246,0.12); color: #a78bfa; border: 1px solid rgba(139,92,246,0.25); }
+        .badge-seeding { background: rgba(34,197,94,0.08); color: var(--green); border: 1px solid rgba(34,197,94,0.15); }
+        .node-progress { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+        .node-progress .node-label { width: 60px; font-size: 0.78rem; color: var(--text-tertiary); flex-shrink: 0; font-weight: 500; }
+        .node-progress .node-label.offline { color: var(--red); opacity: 0.7; }
+        .node-progress .pct { width: 36px; text-align: right; color: var(--text-tertiary); font-size: 0.76rem; font-family: var(--font-mono); }
+
+        /* ========== Stations / Nodes ========== */
+        .station-card, .section-card { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-lg); margin-bottom: 16px; overflow: hidden; }
+        .station-head, .section-card .section-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border-color); background: var(--bg-elevated); }
+        .station-head-left { display: flex; align-items: center; gap: 10px; }
+        .station-name { font-weight: 600; font-size: 0.95rem; color: var(--text-primary); }
+        .station-host { font-size: 0.72rem; color: var(--text-tertiary); font-family: var(--font-mono); }
+        .station-body { padding: var(--space-md) var(--space-lg); }
+        .speed-row { display: flex; gap: var(--space-md); margin-bottom: var(--space-md); }
+        .speed-gauge { flex: 1; background: var(--bg-elevated); border-radius: var(--radius-md); padding: 10px 14px; text-align: center; border: 1px solid var(--border-color); }
+        .speed-gauge .speed-label { font-size: 0.7rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .speed-gauge .speed-value { font-size: 1.2rem; font-weight: 700; font-family: var(--font-mono); }
+        .speed-gauge .speed-value.down { color: var(--accent); }
+        .speed-gauge .speed-value.up { color: var(--green); }
+        .stat-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: var(--space-md); }
+        .stat-chip { padding: 4px 12px; border-radius: var(--radius-sm); font-size: 0.76rem; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+        .stat-chip.downloading { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(59,130,246,0.2); }
+        .stat-chip.paused { background: rgba(234,179,8,0.08); color: var(--yellow); border: 1px solid rgba(234,179,8,0.2); }
+        .stat-chip.completed { background: rgba(34,197,94,0.08); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
+        .stat-chip.failed { background: rgba(239,68,68,0.08); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+        .stat-chip.pending { background: rgba(139,92,246,0.08); color: #a78bfa; border: 1px solid rgba(139,92,246,0.2); }
+        .stat-chip.total { background: transparent; color: var(--text-tertiary); border: 1px solid var(--border-color); }
+        .active-tasks { border-top: 1px solid var(--border-color); padding-top: var(--space-sm); }
+        .active-tasks-title { font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 6px; font-weight: 500; }
+        .active-task-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 0.78rem; }
+        .active-task-item .task-filename { flex: 1; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .active-task-item .task-mini-progress { width: 60px; height: 4px; background: var(--bg-elevated); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+        .active-task-item .task-mini-bar { height: 100%; border-radius: 2px; transition: width 1s ease; }
+        .active-task-item .task-mini-status { font-size: 0.7rem; color: var(--text-tertiary); width: 36px; text-align: right; flex-shrink: 0; }
+        .station-footer { display: flex; justify-content: center; gap: 8px; padding: var(--space-sm) var(--space-lg) var(--space-md); }
+        .station-footer .btn-station { padding: 6px 16px; border-radius: var(--radius-sm); font-size: 0.78rem; color: var(--text-secondary); background: var(--bg-elevated); border: 1px solid var(--border-color); text-decoration: none; cursor: pointer; transition: all var(--transition-fast); }
+        .station-footer .btn-station:hover { background: var(--bg-surface-hover); border-color: var(--border-color-hover); color: var(--text-primary); }
+
+        .node-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .node-dot.online { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+        .node-dot.offline { background: #444; }
+        .node-dot.unknown { background: var(--yellow); box-shadow: 0 0 6px rgba(234,179,8,0.3); }
+        .type-inline { font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-full); background: var(--bg-surface-alt); color: var(--accent); border: 1px solid rgba(59,130,246,0.25); white-space: nowrap; }
+        .node-item { display: flex; align-items: center; padding: 14px var(--space-xl); border-bottom: 1px solid var(--border-color); transition: background var(--transition-fast); gap: 14px; }
+        .node-item:last-child { border-bottom: none; }
+        .node-item:hover { background: var(--bg-elevated-hover); }
+        .node-body { flex: 1; min-width: 0; }
+        .node-body .node-name { font-weight: 600; font-size: 0.95rem; color: var(--text-primary); }
+        .node-body .node-meta { font-size: 0.78rem; color: var(--text-tertiary); margin-top: 3px; }
+        .node-item .node-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .node-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+        .config-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 0.85rem; }
+        .config-grid .label { color: var(--text-tertiary); font-weight: 500; }
+        .config-grid .value { color: var(--text-primary); word-break: break-all; }
+        .config-grid .value.mono { font-family: var(--font-mono); font-size: 0.82rem; }
+
+        .detail-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 999; backdrop-filter: blur(4px); animation: fadeIn 0.15s ease; }
+        .detail-modal { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-lg); width: min(520px, 92vw); max-height: 80vh; overflow-y: auto; animation: sheetUp 0.2s ease; }
+        .detail-head { display: flex; align-items: center; justify-content: space-between; padding: 16px var(--space-xl); border-bottom: 1px solid var(--border-color); }
+        .detail-head h3 { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); word-break: break-all; }
+        .detail-close { background: transparent; border: none; color: var(--text-tertiary); font-size: 1.2rem; cursor: pointer; padding: 4px; line-height: 1; }
+        .detail-close:hover { color: var(--text-primary); }
+        .detail-body { padding: var(--space-xl); }
+        .detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.82rem; }
+        .detail-grid .detail-label { color: var(--text-tertiary); font-weight: 500; white-space: nowrap; }
+        .detail-grid .detail-value { color: var(--text-secondary); }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: var(--space-lg); }
+        @media (max-width: 699px) { .stats-grid { grid-template-columns: 1fr; } }
+
+        .source-popup { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 999; animation: fadeIn 0.15s ease; }
+        .source-sheet { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-lg); width: min(420px, 92vw); max-height: 60vh; overflow-y: auto; animation: sheetUp 0.2s ease; }
+        .source-sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border-color); }
+        .source-sheet-header h3 { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+        .source-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; border-bottom: 1px solid var(--border-color); transition: background var(--transition-fast); }
+        .source-item:last-child { border-bottom: none; }
+        .source-item:hover { background: var(--bg-elevated-hover); }
+        .source-item .source-name { font-size: 0.85rem; color: var(--text-primary); }
+        .source-item .source-dl { font-size: 0.76rem; color: var(--accent); cursor: pointer; }
+        .source-item .source-dl:hover { text-decoration: underline; }
+        .close-btn { background: transparent; border: none; color: var(--text-tertiary); font-size: 1.1rem; cursor: pointer; line-height: 1; padding: 4px; }
+        .close-btn:hover { color: var(--text-primary); }
+
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .form-grid .full { grid-column: 1 / -1; }
+        @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+
+        .test-badge { display: inline-block; font-size: 0.65rem; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-full); background: var(--bg-warning); color: var(--yellow); border: 1px solid rgba(234,179,8,0.25); margin-left: 8px; vertical-align: middle; letter-spacing: 0.3px; }
+    </style>
+</head>
+<body>
+    <div class="global-progress-bar" id="globalProgressBar">
+        <div class="gp-fill" id="globalProgressFill"></div>
+    </div>
+    <div class="toast-float" id="toastFloat"></div>
+
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="topbar-logo">AFD <span>测试页 <span class="test-badge">v2</span></span></div>
+            <div class="topbar-nav">
+                <a href="#" data-page="files" class="active" onclick="switchPage('files', this)"><span>📂</span><span class="nav-label">文件</span></a>
+                <a href="#" data-page="downloads" onclick="switchPage('downloads', this)"><span>📥</span><span class="nav-label">下载</span></a>
+                <a href="#" data-page="stations" onclick="switchPage('stations', this)"><span>📊</span><span class="nav-label">状态</span></a>
+                <a href="#" data-page="nodes" onclick="switchPage('nodes', this)"><span>⚙️</span><span class="nav-label">设置</span></a>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <button class="theme-toggle" id="themeToggle" title="切换主题" onclick="toggleTheme()">🌙</button>
+        </div>
+    </div>
+
+    <div class="container" style="padding-top:16px;">
+        <!-- ===== Files Page ===== -->
+        <div class="page-view" id="page-files">
+            <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="search" id="fileSearch" placeholder="搜索文件..." autocomplete="off" oninput="filterFiles(this.value)">
+            </div>
+            <div class="filter-pills" id="filterPills">
+                <span class="filter-pill active" data-filter="" onclick="setTypeFilter(this,'')">全部</span>
+                <span class="filter-pill" data-filter="image" onclick="setTypeFilter(this,'image')">🖼️</span>
+                <span class="filter-pill" data-filter="video" onclick="setTypeFilter(this,'video')">🎬</span>
+                <span class="filter-pill" data-filter="audio" onclick="setTypeFilter(this,'audio')">🎵</span>
+                <span class="filter-pill" data-filter="doc" onclick="setTypeFilter(this,'doc')">📄</span>
+                <span class="filter-pill" data-filter="zip" onclick="setTypeFilter(this,'zip')">🗜️</span>
+                <span class="filter-pill" data-filter="binary" onclick="setTypeFilter(this,'binary')">⚡</span>
+            </div>
+            <div class="batch-bar" id="batchBarNested" style="display:none">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.82rem"><input type="checkbox" onchange="toggleAllFiles(this.checked)"> 全选</label>
+                <span class="batch-count" id="batchCountNested">已选 0 个</span>
+                <span class="batch-count" id="batchSizeNested" style="color:var(--text-tertiary);font-family:var(--font-mono);font-size:0.78rem"></span>
+                <button class="btn-batch-del" onclick="deleteSelectedFiles()">🗑️ 删除选中</button>
+            </div>
+            <div class="skeleton-wrap active" id="skeletonWrap">
+                <div class="skeleton-header"><span class="skeleton-shimmer" style="width:40px;height:14px"></span><span class="skeleton-shimmer" style="width:200px;height:14px"></span></div>
+                <div class="skeleton-row"><span class="skeleton-shimmer s-cell-check"></span><span class="skeleton-shimmer s-cell-icon"></span><span class="skeleton-shimmer s-cell-name"></span><span class="skeleton-shimmer s-cell-size"></span><span class="skeleton-shimmer s-cell-time"></span><span class="skeleton-shimmer s-cell-actions"></span></div>
+                <div class="skeleton-row"><span class="skeleton-shimmer s-cell-check"></span><span class="skeleton-shimmer s-cell-icon"></span><span class="skeleton-shimmer s-cell-name" style="max-width:55%"></span><span class="skeleton-shimmer s-cell-size"></span><span class="skeleton-shimmer s-cell-time"></span><span class="skeleton-shimmer s-cell-actions"></span></div>
+                <div class="skeleton-row"><span class="skeleton-shimmer s-cell-check"></span><span class="skeleton-shimmer s-cell-icon"></span><span class="skeleton-shimmer s-cell-name" style="max-width:75%"></span><span class="skeleton-shimmer s-cell-size"></span><span class="skeleton-shimmer s-cell-time"></span><span class="skeleton-shimmer s-cell-actions"></span></div>
+                <div class="skeleton-row"><span class="skeleton-shimmer s-cell-check"></span><span class="skeleton-shimmer s-cell-icon"></span><span class="skeleton-shimmer s-cell-name" style="max-width:40%"></span><span class="skeleton-shimmer s-cell-size"></span><span class="skeleton-shimmer s-cell-time"></span><span class="skeleton-shimmer s-cell-actions"></span></div>
+            </div>
+            <div class="gh-file-list" id="fileContent" style="display:none">
+                <div class="gh-file-list-header">
+                    <span class="header-name" style="flex:1;cursor:pointer">📄 文件名</span>
+                    <span class="header-size" style="cursor:pointer">大小</span>
+                    <span class="header-time">时间</span>
+                    <span class="header-actions">操作</span>
+                </div>
+            </div>
+            <div class="stats-bar" id="statsBar" style="display:none">
+                <div class="count">共 <span id="fileCount">0</span> 个文件</div>
+                <div class="total-size" id="totalSize"></div>
+            </div>
+        </div>
+
+        <!-- ===== Downloads Page ===== -->
+        <div class="page-view" id="page-downloads" style="display:none">
+            <div class="page-header"><h1>下载任务 <small>实时监控下载进度</small></h1></div>
+            <div class="form-section">
+                <div class="form-head"><h2>创建新下载</h2></div>
+                <div class="form-body">
+                    <form id="downloadForm" class="form-inline" onsubmit="createDownload(event)">
+                        <input type="url" id="downloadUrl" placeholder="输入下载链接..." required class="input input-url">
+                        <input type="text" id="filename" placeholder="自定义文件名（可选）" class="input" style="width:180px;flex-shrink:0">
+                        <button type="submit" class="btn btn-primary">⬇ 下载</button>
+                    </form>
+                    <div id="submitStatus" class="status-msg" style="margin-top:6px;font-size:0.82rem;color:var(--text-tertiary)"></div>
+                </div>
+            </div>
+            <div class="task-section">
+                <div class="task-head">
+                    <h2><span>📋</span> 全部任务 <span class="count-badge" id="taskCount">0</span></h2>
+                    <div style="display:flex;gap:6px">
+                        <button class="btn" style="padding:4px 10px;font-size:0.76rem" onclick="clearCompletedTasks()">🗑️ 清除已完成</button>
+                        <button class="btn" style="padding:4px 10px;font-size:0.76rem" onclick="loadTasks()">⟳ 刷新</button>
+                    </div>
+                </div>
+                <div id="taskList"><div class="loading"><div class="spinner"></div><div>加载中...</div></div></div>
+            </div>
+        </div>
+
+        <!-- ===== Stations Page ===== -->
+        <div class="page-view" id="page-stations" style="display:none">
+            <div class="page-header"><h1>节点状态 <small>实时节点概览</small></h1></div>
+            <div class="global-bar" id="globalBar">
+                <div class="global-stat-card"><span class="icon">📥</span><div class="info"><div class="num" id="globalDownSpeed">0 B/s</div><div class="label">下载速度</div></div></div>
+                <div class="global-stat-card"><span class="icon">📤</span><div class="info"><div class="num" id="globalUpSpeed">0 B/s</div><div class="label">上传速度</div></div></div>
+                <div class="global-stat-card"><span class="icon">⚡</span><div class="info"><div class="num" id="globalActive">0</div><div class="label">活动任务</div></div></div>
+                <div class="global-stat-card"><span class="icon">⏳</span><div class="info"><div class="num" id="globalWaiting">0</div><div class="label">等待中</div></div></div>
+                <div class="global-stat-card"><span class="icon">✅</span><div class="info"><div class="num" id="globalStopped">0</div><div class="label">已完成</div></div></div>
+            </div>
+            <div id="stationContent"><div class="loading"><div class="spinner"></div><div>加载节点数据...</div></div></div>
+        </div>
+
+        <!-- ===== Nodes Page ===== -->
+        <div class="page-view" id="page-nodes" style="display:none">
+            <div class="page-header"><h1>节点设置 <small>管理连接节点</small></h1></div>
+            <div class="section-card">
+                <div class="section-head"><h2>添加节点</h2></div>
+                <div class="section-body">
+                    <form class="form-grid" onsubmit="addNode(event)">
+                        <div><input class="input" id="nodeId" placeholder="节点ID" required></div>
+                        <div><input class="input" id="nodeName" placeholder="节点名称" required></div>
+                        <div><input class="input" id="nodeHost" placeholder="主机地址" required></div>
+                        <div><input class="input" id="nodePort" placeholder="端口 (默认 18790)" value="18790"></div>
+                        <div class="full" style="display:flex;gap:8px">
+                            <select class="input" id="nodeType" style="width:auto;flex-shrink:0">
+                                <option value="full">完整节点</option>
+                                <option value="download">仅下载</option>
+                                <option value="upload">仅上传</option>
+                            </select>
+                            <input class="input" id="nodeToken" placeholder="认证Token（可选）" style="flex:1">
+                            <button type="submit" class="btn btn-primary">➕ 添加</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="section-card">
+                <div class="section-head"><h2>节点列表 <span class="count-badge" id="nodeCount">0</span></h2></div>
+                <div class="section-body" id="nodeList"><div style="text-align:center;padding:20px;color:var(--text-tertiary)">加载中...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ========================== STATE ==========================
+    const state = { allFiles: [], currentSort: 'time', searchQuery: '', typeFilter: '', selectedIds: new Set(), tasks: [], refreshTimer: null };
+    const typeExts = { image: ['jpg','jpeg','png','gif','webp','svg','bmp','ico'], video: ['mp4','avi','mkv','mov','webm','flv','wmv','m4v'], audio: ['mp3','flac','wav','ogg','aac','wma','m4a'], doc: ['txt','md','json','yml','yaml','xml','csv','log','cfg','conf','ini','toml','pdf','sh','py','js','ts','html','css'], zip: ['zip','rar','7z','tar','gz','bz2','xz','iso'], binary: ['exe','msi','dmg','apk','deb','rpm','AppImage'] };
+
+    // ========================== UTILITIES ==========================
+    function fmtSize(b) { if (!b||b===0)return'0 B'; const u=['B','KB','MB','GB','TB'];let i=0,s=b;while(s>=1024&&i<u.length-1){s/=1024;i++}return s.toFixed(1)+' '+u[i]; }
+    function timeAgo(s){if(!s)return'';const d=Date.now()-new Date(s).getTime();if(isNaN(d))return s;const m=Math.floor(d/60000);if(m<1)return'刚刚';if(m<60)return m+'分钟前';const h=Math.floor(m/60);if(h<24)return h+'小时前';return Math.floor(h/24)+'天前';}
+    function fileIcon(fn){const e=(fn.split('.').pop()||'').toLowerCase();const m={iso:'💿',deb:'📦',tar:'🗜️',gz:'🗜️',bz2:'🗜️',xz:'🗜️',zip:'🗜️',rar:'🗜️','7z':'🗜️',mp4:'🎬',avi:'🎬',mkv:'🎬',mov:'🎬',webm:'🎬',mp3:'🎵',flac:'🎵',wav:'🎵',ogg:'🎵',png:'🖼️',jpg:'🖼️',jpeg:'🖼️',gif:'🖼️',webp:'🖼️',svg:'🖼️',pdf:'📕',txt:'📄',md:'📄',json:'📋',csv:'📊',yml:'⚙️',yaml:'⚙️',py:'🐍',js:'🟨',ts:'🟦',html:'🌐',css:'🎨',br:'🗜️'};return m[e]||'📄';}
+    function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+    function escAttr(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
+    function toast(msg, type) { const el=document.getElementById('toastFloat'); el.textContent=msg; el.className='toast-float'+(type?' '+type:''); el.style.display='block'; setTimeout(()=>el.style.display='none',3000); }
+
+    // ========================== THEME ==========================
+    function toggleTheme() { const h=document.documentElement;const l=h.getAttribute('data-theme')==='light';h.setAttribute('data-theme',l?'dark':'light');document.getElementById('themeToggle').textContent=l?'🌙':'☀️';localStorage.setItem('afd-theme',l?'dark':'light'); }
+    (function(){const t=localStorage.getItem('afd-theme')||'dark';document.documentElement.setAttribute('data-theme',t);document.getElementById('themeToggle').textContent=t==='light'?'☀️':'🌙';})();
+
+    // ========================== PAGE SWITCH ==========================
+    let currentPage = 'files';
+    function switchPage(page, el) {
+        currentPage = page;
+        document.querySelectorAll('.page-view').forEach(p=>p.style.display='none');
+        document.getElementById('page-'+page).style.display='block';
+        document.querySelectorAll('.topbar-nav a').forEach(a=>a.classList.remove('active'));
+        if(el)el.classList.add('active');
+        // Load data on demand
+        if(page==='files') loadFiles();
+        else if(page==='downloads') loadTasks();
+        else if(page==='stations') loadStations();
+        else if(page==='nodes') loadNodes();
+    }
+
+    // ========================== FILES PAGE ==========================
+    function getFileType(filename) { const e=(filename.split('.').pop()||'').toLowerCase(); for(const[t,ex]of Object.entries(typeExts)){if(ex.includes(e))return t} return null; }
+
+    function loadFiles() {
+        const skel=document.getElementById('skeletonWrap');skel.classList.add('active');
+        const fc=document.getElementById('fileContent');fc.style.display='none';
+        fetch('/api/files').then(r=>r.json()).then(data=>{
+            state.allFiles=data.files||[];
+            setTimeout(()=>{skel.classList.remove('active');fc.style.display='block';renderFiles();progressSim();},300);
+        }).catch(()=>{
+            skel.classList.remove('active');fc.style.display='block';
+            document.getElementById('fileContent').innerHTML='<div class="empty-state"><span class="emoji">❌</span><h3>加载失败</h3><p>无法连接到服务器</p></div>';
+        });
+    }
+
+    function filteredFiles() {
+        let f=[...state.allFiles];
+        if(state.searchQuery) f=f.filter(x=>x.filename.toLowerCase().includes(state.searchQuery)||(x.url||'').toLowerCase().includes(state.searchQuery));
+        if(state.typeFilter!=='') { const ex=typeExts[state.typeFilter]||[]; f=f.filter(x=>ex.includes((x.filename.split('.').pop()||'').toLowerCase())); }
+        return f;
+    }
+
+    function sortFiles(files) { return [...files].sort((a,b)=>{switch(state.currentSort){case'time':return new Date(b.downloaded_at||0)-new Date(a.downloaded_at||0);case'name':return a.filename.localeCompare(b.filename,'zh');case'size':return(b.size||0)-(a.size||0);default:return 0}}); }
+
+    function renderFiles() {
+        const files=sortFiles(filteredFiles());
+        const el=document.getElementById('fileContent');
+        let html=`<div class="gh-file-list-header"><span class="header-name" style="flex:1;cursor:pointer" onclick="sortBy('name')">📄 文件名${state.currentSort==='name'?' ▾':''}</span><span class="header-size" style="cursor:pointer" onclick="sortBy('size')">大小${state.currentSort==='size'?' ▾':''}</span><span class="header-time" onclick="sortBy('time')" style="cursor:pointer">时间${state.currentSort==='time'?' ▾':''}</span><span class="header-actions">操作</span></div>`;
+        if(files.length===0){
+            html+=`<div class="empty-state"><span class="emoji">${state.searchQuery?'🔍':'📂'}</span><h3>${state.searchQuery?'没有找到匹配的文件':'还没有下载完成的文件'}</h3><p>${state.searchQuery?'试试其他关键词':'去下载页面提交链接吧'}</p></div>`;
+        } else {
+            for(const f of files){
+                const mt=f.multi_source?'<span class="multi-source-tag">⊕ 多源</span>':'';
+                html+=`<div class="gh-file-row" data-id="${escAttr(f.task_id)}">
+                    <span class="row-check"><input type="checkbox" class="file-check" data-id="${escAttr(f.task_id)}" onchange="updateBatchBar()"></span>
+                    <span class="row-icon">${fileIcon(f.filename)}</span>
+                    <span class="row-name" title="${escAttr(f.filename)}">${esc(f.filename)}${mt}</span>
+                    <span class="row-size">${f.size_formatted||fmtSize(f.size)||'?'}</span>
+                    <span class="row-time">${timeAgo(f.downloaded_at)}</span>
+                    <span class="row-actions">
+                        <button class="btn-row btn-dl-row" onclick="window.open('${escAttr(f.download_url||'')}','_blank')" title="下载">⬇</button>
+                        <button class="btn-row" onclick="showSources('${escAttr(f.task_id)}')" title="选择下载源">⊕</button>
+                        <button class="btn-row" onclick="renameFile('${escAttr(f.task_id)}','${escAttr(f.filename)}')" title="重命名">✏️</button>
+                        <button class="btn-row btn-del-row" onclick="deleteFile('${escAttr(f.task_id)}')" title="删除">🗑️</button>
+                    </span></div>`;
+            }
+        }
+        el.innerHTML=html;
+        const total=state.allFiles.reduce((a,f)=>a+(f.size||0),0);
+        document.getElementById('fileCount').textContent=state.allFiles.length;
+        document.getElementById('totalSize').textContent=fmtSize(total);
+        document.getElementById('statsBar').style.display='flex';
+        updateBatchBar();
+    }
+
+    function filterFiles(val) { state.searchQuery=val.trim().toLowerCase(); renderFiles(); }
+    function setTypeFilter(el,t) { state.typeFilter=t; document.querySelectorAll('.filter-pill').forEach(p=>p.classList.remove('active')); el.classList.add('active'); renderFiles(); }
+    function sortBy(col){state.currentSort=col;renderFiles();}
+
+    function updateBatchBar() {
+        const cbs=document.querySelectorAll('.file-check:checked');
+        const ids=Array.from(cbs).map(cb=>cb.getAttribute('data-id'));
+        const bar=document.getElementById('batchBarNested');
+        const count=document.getElementById('batchCountNested');
+        const sz=document.getElementById('batchSizeNested');
+        if(ids.length===0){bar.style.display='none';state.selectedIds=new Set();return;}
+        bar.style.display='flex';
+        count.textContent='已选 '+ids.length+' 个';
+        let total=0;
+        for(const id of ids){const f=state.allFiles.find(x=>x.task_id===id);if(f)total+=f.size||0;}
+        sz.textContent='共 '+fmtSize(total);
+        state.selectedIds=new Set(ids);
+    }
+    function toggleAllFiles(checked){document.querySelectorAll('.file-check').forEach(cb=>cb.checked=checked);updateBatchBar();}
+
+    async function deleteFile(taskId) {
+        if(!confirm('确定删除这个文件？删除后不可恢复。'))return;
+        try{const r=await fetch('/api/task/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task_id:taskId})});if(r.ok){toast('✅ 已删除','success');loadFiles();}else{const d=await r.json();toast('❌ '+d.error,'error');}}catch(e){toast('❌ 删除失败','error');}
+    }
+    async function deleteSelectedFiles() {
+        const ids=Array.from(state.selectedIds);
+        if(!ids.length||!confirm('确定删除选中的 '+ids.length+' 个文件？不可恢复。'))return;
+        let ok=0;
+        for(const id of ids){try{const r=await fetch('/api/task/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task_id:id})});if(r.ok)ok++;}catch{}}
+        toast('✅ 已删除 '+ok+' 个文件','success');
+        loadFiles();
+    }
+    async function showSources(taskId) {
+        const f=state.allFiles.find(x=>x.task_id===taskId);
+        if(!f||!f.sources||f.sources.length<2){toast('该文件只有一个源','');return;}
+        let html=`<div class="source-popup" id="sourcePopup" onclick="if(event.target===this)this.remove()"><div class="source-sheet"><div class="source-sheet-header"><h3>选择下载源</h3><button class="close-btn" onclick="this.closest('.source-popup').remove()">✕</button></div>`;
+        for(const s of f.sources) {
+            const url=s.download_url||f.download_url;
+            html+=`<div class="source-item"><span class="source-name">${esc(s.node_label||s.node_id)}</span><span class="source-dl" onclick="window.open('${escAttr(url)}','_blank');this.closest('.source-popup').remove()">⬇ 下载</span></div>`;
+        }
+        html+=`</div></div>`;
+        const existing=document.getElementById('sourcePopup');if(existing)existing.remove();
+        document.body.insertAdjacentHTML('beforeend',html);
+    }
+    async function renameFile(taskId,current){
+        const n=prompt('请输入新文件名：',current);
+        if(!n||n===current)return;
+        try{const r=await fetch('/api/file/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task_id:taskId,new_name:n})});const d=await r.json();if(d.status==='renamed'){toast('✅ 已重命名','success');loadFiles();}else{toast('❌ '+(d.error||'重命名失败'),'error');}}catch(e){toast('❌ '+e.message,'error');}
+    }
+
+    // ========================== DOWNLOADS PAGE ==========================
+    async function createDownload(e) {
+        e.preventDefault();
+        const url=document.getElementById('downloadUrl').value.trim();
+        const fn=document.getElementById('filename').value.trim();
+        const st=document.getElementById('submitStatus');
+        if(!url)return;
+        st.textContent='⏳ 提交中...';
+        try{
+            const r=await fetch('/api/task/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,filename:fn||null})});
+            const d=await r.json();
+            if(d.task_id){
+                const lbl=url.startsWith('magnet:')?'磁力链接':url.endsWith('.torrent')?'种子':'下载';
+                st.textContent='✅ '+lbl+'任务已创建 ('+d.task_id.slice(0,8)+'...)';
+                st.style.color='var(--green)';
+                document.getElementById('downloadUrl').value='';
+                document.getElementById('filename').value='';
+                toast('✅ 任务创建成功','success');
+                loadTasks();
+            } else {
+                st.textContent='❌ '+(d.error||'创建失败');
+                st.style.color='var(--red)';
+            }
+        }catch(e){
+            st.textContent='❌ 请求失败: '+e.message;st.style.color='var(--red)';
+        }
+    }
+
+    async function loadTasks() {
+        try{
+            const r=await fetch('/api/task/list');const d=await r.json();
+            renderTasks(d.tasks||[]);
+        }catch(e){console.error(e);}
+    }
+
+    function renderTasks(tasks) {
+        state.tasks=tasks;
+        const el=document.getElementById('taskList');
+        const ct=document.getElementById('taskCount');if(ct)ct.textContent=tasks.length;
+        if(!tasks.length){el.innerHTML='<div class="empty-state" style="padding:40px 20px"><span style="font-size:2rem;display:block;margin-bottom:8px">📥</span><p style="color:#555;font-size:0.85rem">暂无下载任务，粘贴链接开始吧</p></div>';return;}
+        el.innerHTML=tasks.map(t=>{
+            const sm={downloading:'下载中',paused:'已暂停',completed:'已完成',failed:'失败',pending:'等待中',seeding:'做种',cancelled:'已取消',all_completed:'全部完成'};
+            const st=sm[t.status]||t.status;
+            const bc=['all_completed','completed'].includes(t.status)?'badge-completed':t.status==='failed'||t.status==='cancelled'?'badge-failed':t.status==='pending'?'badge-pending':t.status==='paused'?'badge-paused':t.status==='seeding'?'badge-seeding':'badge-downloading';
+            const nh=(t.nodes||[]).map(n=>{
+                const pct=Math.round((n.progress||0)*100);
+                const barCls=['completed','seeding'].includes(n.status)?'progress-bar-green':n.status==='failed'||n.status==='cancelled'?'progress-bar-red':n.status==='paused'?'progress-bar-yellow':'progress-bar-accent';
+                return `<div class="node-progress"><span class="node-label ${n.status==='offline'?'offline':''}">${esc(n.node_name||n.node_id)}</span><div class="progress-bar-wrap"><div class="progress-bar ${barCls}" style="width:${pct}%"></div></div><span class="pct">${pct}%</span></div>`;
+            }).join('');
+            const fn=t.filename||t.url.split('/').pop()||t.url;
+            const isActive=t.status==='downloading';const isPaused=t.status==='paused';
+            let ab='';
+            if(isPaused)ab+=`<button class="task-action-btn resume" onclick="event.stopPropagation();taskAction('resume','${escAttr(t.id)}')" title="继续">▶️</button>`;
+            if(isActive)ab+=`<button class="task-action-btn pause" onclick="event.stopPropagation();taskAction('pause','${escAttr(t.id)}')" title="暂停">⏸️</button><button class="task-action-btn cancel" onclick="event.stopPropagation();taskAction('cancel','${escAttr(t.id)}')" title="取消">⏹</button>`;
+            if(['failed','cancelled'].includes(t.status))ab+=`<button class="task-action-btn retry" onclick="event.stopPropagation();taskAction('retry','${escAttr(t.id)}')" title="重新下载">🔄</button>`;
+            if(!isActive)ab+=`<button class="task-action-btn delete" onclick="event.stopPropagation();taskAction('delete','${escAttr(t.id)}')" title="删除">🗑️</button>`;
+            return `<div class="task-item" onclick="showTaskDetail('${escAttr(t.id)}')">
+                <div class="task-header"><div class="task-info"><div class="name">${esc(fn)} <span style="font-size:0.7rem;color:var(--text-tertiary)">${t.id.slice(0,8)}</span></div><div class="url">${esc(t.url)}</div><div class="task-meta-bar">${t.total_size?`<span class="meta-chip">📦 ${fmtSize(t.total_size)}</span>`:''}</div></div>
+                <div class="task-status-col"><span class="badge ${bc}">${st}</span><div class="task-actions">${ab}</div></div></div>
+                ${nh?`<div class="nodes-section">${nh}</div>`:''}</div>`;
+        }).join('');
+    }
+
+    async function taskAction(action,taskId){
+        const routes={resume:'/api/task/resume',pause:'/api/task/pause',cancel:'/api/task/cancel',retry:'/api/task/retry',delete:'/api/task/delete'};
+        const url=routes[action];if(!url)return;
+        if(['cancel','delete'].includes(action)&&!confirm('确定'+(action==='cancel'?'取消':'删除')+'这个任务？'))return;
+        try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task_id:taskId})});if(r.ok){toast('✅ 操作成功','success');loadTasks();}}catch(e){toast('❌ 操作失败','error');}
+    }
+
+    async function showTaskDetail(taskId){
+        try{
+            const r=await fetch('/api/task/'+encodeURIComponent(taskId));if(!r.ok)return;
+            const t=await r.json();
+            const sm={downloading:'下载中',paused:'已暂停',completed:'已完成',failed:'失败',pending:'等待中',seeding:'做种',cancelled:'已取消',all_completed:'全部完成'};
+            const h=`<div class="detail-modal-overlay" onclick="if(event.target===this)this.remove()"><div class="detail-modal"><div class="detail-head"><h3>${esc(t.filename||'任务详情')}</h3><button class="detail-close" onclick="this.closest('.detail-modal-overlay').remove()">✕</button></div><div class="detail-body"><div class="detail-grid">
+                <span class="detail-label">状态</span><span class="detail-value">${sm[t.status]||t.status}</span>
+                <span class="detail-label">链接</span><span class="detail-value" style="word-break:break-all">${esc(t.url||'')}</span>
+                <span class="detail-label">大小</span><span class="detail-value">${fmtSize(t.total_size)||'未知'}</span>
+                <span class="detail-label">创建时间</span><span class="detail-value">${t.created_at||'未知'}</span>
+                <span class="detail-label">更新时间</span><span class="detail-value">${t.updated_at||'未知'}</span>
+            </div></div></div></div>`;
+            const ol=document.querySelector('.detail-modal-overlay');if(ol)ol.remove();
+            document.body.insertAdjacentHTML('beforeend',h);
+        }catch(e){}
+    }
+
+    async function clearCompletedTasks() {
+        const completed=state.tasks.filter(t=>['completed','all_completed','seeding','failed','cancelled'].includes(t.status));
+        if(!completed.length){toast('没有已完成的任务','');return;}
+        if(!confirm('清除所有已完成/失败的任务？'))return;
+        for(const t of completed){try{await fetch('/api/task/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task_id:t.id})});}catch{}};
+        toast('✅ 已清除','success');loadTasks();
+    }
+
+    // ========================== STATIONS PAGE ==========================
+    async function loadStations() {
+        try{
+            const r=await fetch('/api/stations');const d=await r.json();
+            renderStations(d.stations||[],d);
+        }catch(e){document.getElementById('stationContent').innerHTML=`<div class="empty-state"><span class="emoji">❌</span><h3>加载失败</h3><p>${esc(e.message)}</p></div>`;}
+    }
+
+    function renderStations(stations) {
+        const local=stations.find(s=>s.is_local&&s.speed);
+        if(local){
+            document.getElementById('globalDownSpeed').textContent=fmtSpeed(local.speed.download);
+            document.getElementById('globalUpSpeed').textContent=fmtSpeed(local.speed.upload);
+            document.getElementById('globalActive').textContent=local.speed.active;
+            document.getElementById('globalWaiting').textContent=local.speed.waiting;
+            document.getElementById('globalStopped').textContent=local.speed.stopped;
+        }
+        if(!stations.length){document.getElementById
+
+    function fmtSpeed(b) { if (!b||b===0) return '0 B/s'; const u=['B/s','KB/s','MB/s','GB/s']; let i=0,s=b; while(s>=1024&&i<u.length-1){s/=1024;i++} return s.toFixed(1)+' '+u[i]; }
+
+    function renderStations(stations) {
+        const el=document.getElementById('stationContent');
+        if(!stations.length){el.innerHTML='<div class="empty-state"><span class="emoji">📡</span><h3>没有节点数据</h3></div>';return;}
+        el.innerHTML=stations.map(s=>{
+            const icon=s.is_local?'🖥️':'🌐';
+            const statusDot=s.connected||s.online?'online':'offline';
+            const spd=s.speed||{download:0,upload:0,active:0,waiting:0,stopped:0};
+            const tasks=(s.active_tasks||[]).slice(0,6);
+            return `<div class="station-card"><div class="station-head"><div class="station-head-left"><span class="node-dot ${statusDot}"></span><span class="station-name">${esc(s.name||s.id)}</span><span class="station-host">${esc(s.host||'')}</span>${s.fake_test?'<span class="multi-source-tag" style="font-size:0.65rem">模拟</span>':''}</div><span class="type-inline">${s.is_local?'本地':'远程'}</span></div>
+            <div class="station-body"><div class="speed-row"><div class="speed-gauge"><div class="speed-label">📥 下载</div><div class="speed-value down">${fmtSpeed(spd.download)}</div></div>
+            <div class="speed-gauge"><div class="speed-label">📤 上传</div><div class="speed-value up">${fmtSpeed(spd.upload)}</div></div>
+            <div class="speed-gauge"><div class="speed-label">⚡ 活动</div><div class="speed-value" style="color:var(--text-primary)">${spd.active}</div></div></div>
+            <div class="stat-chips"><span class="stat-chip downloading"><span>📥</span>活动 ${spd.active}</span><span class="stat-chip paused"><span>⏸️</span>暂停 ${spd.waiting}</span><span class="stat-chip completed"><span>✅</span>完成 ${spd.stopped}</span></div>
+            ${tasks.length?`<div class="active-tasks"><div class="active-tasks-title">活动任务</div>${tasks.map(t=>`<div class="active-task-item"><span class="task-filename">${esc(t.filename||t.name||'任务')}</span><div class="task-mini-progress"><div class="task-mini-bar progress-bar-accent" style="width:${Math.round((t.progress||0)*100)}%"></div></div><span class="task-mini-status">${Math.round((t.progress||0)*100)}%</span></div>`).join('')}</div>`:''}</div>
+            <div class="station-footer"><button class="btn-station" onclick="switchPage('downloads',document.querySelector('[data-page=downloads]'))">📋 查看任务</button><button class="btn-station" onclick="loadStations()">🔄 刷新</button></div></div>`;
+        }).join('');
+    }
+
+    // ========================== NODES PAGE ==========================
+    async function loadNodes() {
+        try{
+            const r=await fetch('/api/nodes');const d=await r.json();
+            renderNodes(d.nodes||[]);
+        }catch(e){document.getElementById('nodeList').innerHTML=`<div style="text-align:center;padding:20px;color:var(--red);font-size:0.85rem">❌ 加载失败: ${esc(e.message)}</div>`;}
+    }
+
+    function renderNodes(nodes) {
+        const el=document.getElementById('nodeList');
+        if(!nodes.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-tertiary)">暂无节点，请添加</div>';document.getElementById('nodeCount').textContent='0';return;}
+        el.innerHTML=nodes.map(n=>{
+            const dotCls=n.online?'online':'offline';
+            return `<div class="node-item"><span class="node-dot ${dotCls}"></span><div class="node-body">
+                <div class="node-top"><span class="node-name">${esc(n.name||n.id)}</span>${n.type?`<span class="type-inline">${esc(n.type)}</span>`:''}</div>
+                <div class="node-meta">${esc(n.host||'')}${n.port?':'+n.port:''} · ${n.online?'在线':'离线'} ${n.last_seen?'· 最后连接 '+timeAgo(n.last_seen):''}</div></div>
+                <div class="node-actions"><button class="task-action-btn delete" onclick="removeNode('${escAttr(n.id)}')" title="删除节点">🗑️</button></div></div>`;
+        }).join('');
+        document.getElementById('nodeCount').textContent=nodes.length;
+    }
+
+    async function addNode(e){
+        e.preventDefault();
+        const id=document.getElementById('nodeId').value.trim();
+        const name=document.getElementById('nodeName').value.trim();
+        const host=document.getElementById('nodeHost').value.trim();
+        const port=document.getElementById('nodePort').value.trim()||'18790';
+        const type=document.getElementById('nodeType').value;
+        const token=document.getElementById('nodeToken').value.trim();
+        if(!id||!name||!host){toast('请填写必填字段','error');return;}
+        try{
+            const r=await fetch('/api/nodes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,name,host,port,type,token:token||null})});
+            const d=await r.json();
+            if(d.ok||d.status==='added'||d.id){toast('✅ 节点已添加','success');loadNodes();document.getElementById('nodeId').value='';document.getElementById('nodeName').value='';document.getElementById('nodeHost').value='';document.getElementById('nodePort').value='18790';document.getElementById('nodeToken').value='';}
+            else{toast('❌ '+(d.error||'添加失败'),'error');}
+        }catch(e){toast('❌ 请求失败','error');}
+    }
+
+    async function removeNode(id){
+        if(!confirm('确定删除节点 '+id+'？'))return;
+        try{const r=await fetch('/api/node/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({node_id:id})});if(r.ok){toast('✅ 节点已删除','success');loadNodes();}else{toast('❌ 删除失败','error');}}catch(e){toast('❌ 请求失败','error');}
+    }
+
+    // ========================== PROGRESS BAR ==========================
+    function progressSim() {
+        const bar=document.getElementById('globalProgressFill');
+        if(bar){bar.style.width='0%';setTimeout(()=>{bar.style.width='60%';},100);setTimeout(()=>{bar.style.width='100%';},400);setTimeout(()=>{bar.style.display='none';},900);setTimeout(()=>{bar.style.display='';bar.style.width='0%';},1100);}
+    }
+
+    // ========================== POLLING ==========================
+    let pollTimer;
+    function startPoll(){
+        if(pollTimer)clearInterval(pollTimer);
+        pollTimer=setInterval(()=>{
+            if(currentPage==='downloads')loadTasks();
+            else if(currentPage==='stations')loadStations();
+        },4000);
+    }
+    startPoll();
+
+    // ========================== AUTO LOAD ==========================
+    document.addEventListener('DOMContentLoaded',()=>{loadFiles();});
+    </script>
+</body>
+</html>

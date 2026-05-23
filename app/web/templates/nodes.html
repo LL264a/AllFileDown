@@ -1,421 +1,45 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-    <title>⚙️ 节点设置 - AFD</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <style>
-        .page-header {
-            padding: 20px 0 14px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .page-header h1 {
-            font-size: 1.15rem;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-        .page-header h1 small {
-            font-weight: 400;
-            font-size: 0.8rem;
-            color: var(--text-tertiary);
-            margin-left: 8px;
-        }
+{% extends "base.html" %}
+{% block title %}节点设置{% endblock %}
+{% block logo_subtitle %}设置{% endblock %}
+{% block nav_nodes_class %}active{% endblock %}
+{% block extra_head %}
+<style>
+    .presets-wrap{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+    .preset-btn{padding:6px 14px;background:var(--bg-surface-alt);border:1px solid var(--border-color);border-radius:var(--radius-sm);color:var(--text-secondary);font-size:.85rem;cursor:pointer;transition:all var(--transition-fast)}
+    .preset-btn:hover{background:var(--bg-surface-hover);color:var(--text-primary)}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .form-grid .full{grid-column:1/-1}
+    @media(max-width:640px){.form-grid{grid-template-columns:1fr}}
 
-        .section-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-lg);
-            margin-bottom: 16px;
-            overflow: hidden;
-        }
-        .section-card .section-head {
-            padding: 14px var(--space-xl);
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .section-card .section-head h2 {
-            font-size: 0.88rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .section-card .section-head h2 .count-badge {
-            font-size: 0.7rem;
-            font-weight: 500;
-            color: var(--text-tertiary);
-            background: var(--bg-surface-alt);
-            padding: 1px 8px;
-            border-radius: var(--radius-full);
-        }
-        .section-card .section-body {
-            padding: var(--space-xl);
-        }
+    /* Directory picker modal */
+    .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg-overlay);z-index:9999;align-items:center;justify-content:center}
+    .modal-overlay.active{display:flex}
+    .modal-box{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);width:90%;max-width:520px;max-height:80vh;display:flex;flex-direction:column}
+    .modal-head{padding:14px 18px;border-bottom:1px solid var(--border-color);font-weight:600;font-size:.9rem;display:flex;align-items:center;justify-content:space-between}
+    .modal-head .modal-close{cursor:pointer;color:var(--text-tertiary);font-size:1.2rem;line-height:1}
+    .modal-head .modal-close:hover{color:var(--text-primary)}
+    .modal-body{padding:14px 18px;overflow-y:auto;flex:1;min-height:200px}
+    .modal-current-path{font-family:var(--font-mono);font-size:.85rem;color:var(--text-secondary);background:var(--bg-surface-alt);padding:6px 10px;border-radius:var(--radius-sm);margin:0 18px;word-break:break-all}
+    .dir-item{display:flex;align-items:center;padding:6px 8px;border-radius:var(--radius-sm);cursor:pointer;gap:8px;font-size:.85rem;color:var(--text-primary);transition:background var(--transition-fast)}
+    .dir-item:hover{background:var(--bg-surface-hover)}
+    .dir-item .dir-icon{flex-shrink:0}
+    .dir-item .dir-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .dir-item .dir-count{font-size:.80rem;color:var(--text-tertiary)}
+    .dir-item.parent{color:var(--accent);font-weight:500}
+    .modal-foot{padding:12px 18px;border-top:1px solid var(--border-color);display:flex;align-items:center;gap:8px}
+    .modal-foot .modal-path-input{flex:1;background:var(--bg-surface-alt);border:1px solid var(--border-color);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:.85rem;padding:6px 10px}
+    .modal-foot .modal-path-input:focus{outline:none;border-color:var(--accent)}
+    .modal-foot .btn{font-size:.85rem;padding:6px 14px}
 
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
-        .form-grid .full { grid-column: 1 / -1; }
-
-        @media (max-width: 640px) {
-            .form-grid { grid-template-columns: 1fr; }
-        }
-
-        /* Node List */
-        .node-list { margin-top: 0; }
-        .node-item {
-            display: flex;
-            align-items: center;
-            padding: 14px var(--space-xl);
-            border-bottom: 1px solid var(--border-color);
-            transition: background var(--transition-fast);
-            gap: 14px;
-        }
-        .node-item:last-child { border-bottom: none; }
-        .node-item:hover { background: var(--bg-elevated-hover); }
-
-        .node-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-        .node-dot.online {
-            background: var(--green);
-            box-shadow: 0 0 6px rgba(34,197,94,0.4);
-        }
-        .node-dot.offline { background: #444; }
-        .node-dot.unknown {
-            background: var(--yellow);
-            box-shadow: 0 0 6px rgba(234,179,8,0.3);
-        }
-
-        .node-body {
-            flex: 1;
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-        }
-        .node-body .node-top {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            width: 100%;
-            flex-wrap: wrap;
-        }
-        .node-body .node-name {
-            font-weight: 600;
-            font-size: 0.95rem;
-            color: var(--text-primary);
-            white-space: nowrap;
-        }
-        .type-inline {
-            font-size: 0.72rem;
-            font-weight: 600;
-            padding: 2px 8px;
-            border-radius: var(--radius-full);
-            background: var(--bg-surface-alt);
-            color: var(--accent);
-            border: 1px solid rgba(59,130,246,0.25);
-            white-space: nowrap;
-            line-height: 1.4;
-        }
-        .node-body .node-meta {
-            font-size: 0.78rem;
-            color: var(--text-tertiary);
-            margin-top: 3px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .node-actions {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-shrink: 0;
-        }
-
-        .node-path {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 4px;
-            font-size: 0.78rem;
-            color: var(--text-tertiary);
-        }
-        .node-path .path-label {
-            font-family: var(--font-mono);
-            background: var(--bg-surface-alt);
-            padding: 2px 8px;
-            border-radius: var(--radius-sm);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 280px;
-        }
-        .btn-edit {
-            background: var(--bg-surface-alt);
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
-            border-radius: var(--radius-sm);
-            padding: 2px 10px;
-            font-size: 0.72rem;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-        }
-        .btn-edit:hover {
-            background: var(--bg-elevated-hover);
-            color: var(--text-primary);
-        }
-
-        .type-tag {
-            display: inline-block;
-            padding: 2px 10px;
-            border-radius: var(--radius-full);
-            font-size: 0.7rem;
-            font-weight: 600;
-        }
-        .type-tag.full {
-            background: var(--accent-dim);
-            color: var(--accent);
-            border: 1px solid rgba(59,130,246,0.25);
-        }
-        .type-tag.download {
-            background: var(--yellow-dim);
-            color: var(--yellow);
-            border: 1px solid rgba(234,179,8,0.25);
-        }
-        .type-tag.upload {
-            background: var(--green-dim);
-            color: var(--green);
-            border: 1px solid rgba(34,197,94,0.25);
-        }
-
-        .status-tag {
-            padding: 2px 10px;
-            border-radius: var(--radius-full);
-            font-size: 0.68rem;
-            font-weight: 500;
-        }
-        .status-tag.online {
-            background: rgba(34,197,94,0.12);
-            color: var(--green);
-        }
-        .status-tag.offline {
-            background: rgba(100,100,100,0.15);
-            color: #888;
-        }
-        .status-tag.unknown {
-            background: rgba(234,179,8,0.12);
-            color: var(--yellow);
-        }
-
-        .type-select {
-            background: var(--bg-surface-alt);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-full);
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 4px 14px;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-            -webkit-appearance: none;
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            padding-right: 28px;
-            max-width: 140px;
-            text-align: center;
-        }
-        .type-select:hover {
-            border-color: var(--accent);
-            color: var(--text-primary);
-            background-color: var(--bg-elevated-hover);
-        }
-        .type-select:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px var(--accent-glow);
-        }
-
-        /* 选中项颜色匹配 type-tag */
-        .type-select option[value="full"] { background: var(--accent-dim); color: var(--accent); }
-        .type-select option[value="download"] { background: var(--yellow-dim); color: var(--yellow); }
-        .type-select option[value="upload"] { background: var(--green-dim); color: var(--green); }
-
-        /* Config info */
-        .config-grid {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 8px 16px;
-            font-size: 0.85rem;
-        }
-        .config-grid .label {
-            color: var(--text-tertiary);
-            font-weight: 500;
-        }
-        .config-grid .value {
-            color: var(--text-primary);
-            word-break: break-all;
-        }
-        .config-grid .value.mono {
-            font-family: var(--font-mono);
-            font-size: 0.82rem;
-        }
-
-        .empty-nodes {
-            text-align: center;
-            padding: 30px;
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-
-        /* Presets */
-        .presets-wrap {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 14px;
-        }
-        .preset-btn {
-            padding: 6px 14px;
-            background: var(--bg-surface-alt);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            color: var(--text-secondary);
-            font-size: 0.78rem;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-        }
-        .preset-btn:hover {
-            background: var(--bg-elevated-hover);
-            color: var(--text-primary);
-        }
-            /* Directory picker modal */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 9999;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-overlay.active { display: flex; }
-        .modal-box {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-lg);
-            width: 90%;
-            max-width: 520px;
-            max-height: 80vh;
-            display: flex;
-            flex-direction: column;
-        }
-        .modal-head {
-            padding: 14px 18px;
-            border-bottom: 1px solid var(--border-color);
-            font-weight: 600;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .modal-head .modal-close {
-            cursor: pointer;
-            color: var(--text-tertiary);
-            font-size: 1.2rem;
-            line-height: 1;
-        }
-        .modal-head .modal-close:hover { color: var(--text-primary); }
-        .modal-body {
-            padding: 14px 18px;
-            overflow-y: auto;
-            flex: 1;
-            min-height: 200px;
-        }
-        .modal-current-path {
-            font-family: var(--font-mono);
-            font-size: 0.78rem;
-            color: var(--text-secondary);
-            background: var(--bg-surface-alt);
-            padding: 6px 10px;
-            border-radius: var(--radius-sm);
-            margin: 0 18px;
-            word-break: break-all;
-        }
-        .dir-item {
-            display: flex;
-            align-items: center;
-            padding: 6px 8px;
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            gap: 8px;
-            font-size: 0.85rem;
-            color: var(--text-primary);
-            transition: background var(--transition-fast);
-        }
-        .dir-item:hover { background: var(--bg-elevated-hover); }
-        .dir-item .dir-icon { flex-shrink: 0; }
-        .dir-item .dir-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .dir-item .dir-count { font-size: 0.72rem; color: var(--text-tertiary); }
-        .dir-item.parent { color: var(--accent); font-weight: 500; }
-        .modal-foot {
-            padding: 12px 18px;
-            border-top: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .modal-foot .modal-path-input {
-            flex: 1;
-            background: var(--bg-surface-alt);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            color: var(--text-primary);
-            font-family: var(--font-mono);
-            font-size: 0.78rem;
-            padding: 6px 10px;
-        }
-        .modal-foot .modal-path-input:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-        .modal-foot .btn { font-size: 0.78rem; padding: 6px 14px; }
-    </style>
-</head>
-<body>
-    <div class="topbar">
-        <div class="topbar-left">
-            <div class="topbar-logo">AFD <span>设置</span></div>
-            <div class="topbar-nav">
-                <a href="/"><span>📂</span></a>
-                <a href="/downloads"><span>📥</span></a>
-                <a href="/stations"><span>📊</span></a>
-                <a href="/nodes" class="active"><span>⚙️</span></a>
-            </div>
-        </div>
-        <div class="topbar-right">
-        </div>
-        </div>
-    </div>
-
-    <div class="container" style="padding-top:0;">
+    .config-grid{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:.85rem}
+    .config-grid .label{color:var(--text-tertiary);font-weight:500}
+    .config-grid .value{color:var(--text-primary);word-break:break-all}
+    .config-grid .value.mono{font-family:var(--font-mono);font-size:.88rem}
+</style>
+{% endblock %}
+{% block content %}
         <div class="page-header">
-            <h1>节点设置 <small>管理下载集群</small></h1>
+            <h1>节点设置</h1>
         </div>
 
         <!-- 添加节点 -->
@@ -423,7 +47,7 @@
             <div class="section-head"><h2>＋ 添加节点</h2></div>
             <div class="section-body">
                 <div class="presets-wrap">
-                    <span style="font-size:0.78rem;color:var(--text-tertiary);line-height:34px;">快速填充：</span>
+                    <span style="font-size:.85rem;color:var(--text-tertiary);align-self:center">快速填充：</span>
                     <button class="preset-btn" onclick="fillPreset('sk','S.K. TX-HK','43.161.227.135','38870','full')">S.K. ⭐</button>
                     <button class="preset-btn" onclick="fillPreset('vv','V.V. TX-HK','43.132.238.248','22924','full')">V.V.</button>
                     <button class="preset-btn" onclick="fillPreset('kk','K.K. YYSZ','103.236.67.197','33323','full')">K.K.</button>
@@ -437,7 +61,7 @@
                     <input type="text" id="nodeHost" placeholder="IP 地址" required class="input">
                     <input type="number" id="nodePort" placeholder="端口" value="18790" class="input">
                     <select id="nodeType" class="input full">
-                        <option value="full">📤📥 上下节点（可下载可上传）</option>
+                        <option value="full">📤📥 上下节点</option>
                         <option value="download">📥 仅下载节点</option>
                         <option value="upload">📤 仅上传节点</option>
                     </select>
@@ -451,10 +75,10 @@
         <div class="section-card">
             <div class="section-head">
                 <h2><span>🖥️</span> 已有节点 <span class="count-badge" id="nodeCount">0</span></h2>
-                <button class="refresh-btn" onclick="loadNodes()">⟳ 刷新</button>
+                <button class="btn btn-sm" onclick="loadNodes()">⟳ 刷新</button>
             </div>
             <div id="nodeList" class="node-list">
-                <div class="empty-nodes">还没有添加节点</div>
+                <div class="empty-state" style="padding:30px"><p style="color:var(--text-tertiary)">还没有添加节点</p></div>
             </div>
         </div>
 
@@ -463,24 +87,37 @@
             <div class="section-head"><h2>🔧 本机配置</h2></div>
             <div class="section-body">
                 <div class="config-grid">
-                    <span class="label">节点 ID</span>
-                    <span class="value mono">{{ node_id }}</span>
-                    <span class="label">节点名称</span>
-                    <span class="value">{{ node_name }}</span>
-                    <span class="label">Web 端口</span>
-                    <span class="value mono">18790</span>
-                    <span class="label">文件端口</span>
-                    <span class="value mono">18791</span>
-                    <span class="label">监听地址</span>
-                    <span class="value mono">0.0.0.0</span>
-                    <span class="label">下载目录</span>
-                    <span class="value mono" style="font-size:0.78rem">{{ download_dir }}</span>
+                    <span class="label">节点 ID</span><span class="value mono">{{ node_id }}</span>
+                    <span class="label">节点名称</span><span class="value">{{ node_name }}</span>
+                    <span class="label">Web 端口</span><span class="value mono">18790</span>
+                    <span class="label">文件端口</span><span class="value mono">18791</span>
+                    <span class="label">监听地址</span><span class="value mono">0.0.0.0</span>
+                    <span class="label">下载目录</span><span class="value mono" style="font-size:.85rem">{{ download_dir }}</span>
                 </div>
             </div>
         </div>
-    </div>
 
+        <!-- Directory Picker Modal -->
+        <div class="modal-overlay" id="dirPicker">
+            <div class="modal-box">
+                <div class="modal-head">
+                    <span>选择保存目录</span>
+                    <span class="modal-close" onclick="closeDirPicker()">✕</span>
+                </div>
+                <div class="modal-current-path" id="dirCurrentPath">/</div>
+                <div class="modal-body" id="dirList">...</div>
+                <div class="modal-foot">
+                    <input class="modal-path-input" id="dirPathInput" placeholder="或直接输入路径">
+                    <button class="btn btn-sm" onclick="mkdirInPicker()">📁 新建</button>
+                    <button class="btn btn-success btn-sm" onclick="confirmDirPicker()">✅ 确认</button>
+                </div>
+            </div>
+        </div>
+{% endblock %}
+{% block extra_scripts %}
     <script>
+        let _pickerNodeId = null;
+
         document.addEventListener('DOMContentLoaded', () => {
             loadNodes();
             document.getElementById('nodeForm').addEventListener('submit', async (e) => {
@@ -494,121 +131,80 @@
                 if (!nodeId || !nodeName || !nodeHost) return;
                 try {
                     const res = await fetch('/api/node/add', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            node_id: nodeId, name: nodeName, host: nodeHost,
-                            port: nodePort, node_type: nodeType, auth_token: nodeToken
-                        })
+                        method:'POST', headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({node_id:nodeId,name:nodeName,host:nodeHost,port:nodePort,node_type:nodeType,auth_token:nodeToken})
                     });
                     const data = await res.json();
                     if (data.status === 'added') {
-                        ['nodeId','nodeName','nodeHost','nodeToken'].forEach(id => document.getElementById(id).value = '');
+                        ['nodeId','nodeName','nodeHost','nodeToken'].forEach(id => document.getElementById(id).value='');
                         loadNodes();
                     }
-                } catch (err) {
-                    alert('添加节点失败: ' + err.message);
-                }
+                } catch(err) { alert('添加失败: '+err.message); }
             });
+            document.getElementById('dirPicker').addEventListener('click', function(e) { if (e.target===this) closeDirPicker(); });
+            document.getElementById('dirPathInput').addEventListener('keydown', function(e) { if (e.key==='Enter') loadDir(this.value.trim()); });
         });
 
-        function fillPreset(id, name, host, port, type) {
-            document.getElementById('nodeId').value = id;
-            document.getElementById('nodeName').value = name;
-            document.getElementById('nodeHost').value = host;
-            document.getElementById('nodePort').value = port;
-            document.getElementById('nodeType').value = type;
+        function fillPreset(id,name,host,port,type) {
+            document.getElementById('nodeId').value=id; document.getElementById('nodeName').value=name;
+            document.getElementById('nodeHost').value=host; document.getElementById('nodePort').value=port;
+            document.getElementById('nodeType').value=type;
         }
 
         async function loadNodes() {
             try {
                 const res = await fetch('/api/nodes');
                 const data = await res.json();
-                renderNodes(data.nodes || []);
-            } catch (err) {
-                console.error('loadNodes:', err);
-            }
+                renderNodes(data.nodes||[]);
+            } catch(err) { console.error(err); }
         }
 
         function renderNodes(nodes) {
+            document.getElementById('nodeCount').textContent = nodes.length;
             const container = document.getElementById('nodeList');
-            const countEl = document.getElementById('nodeCount');
-            countEl.textContent = nodes.length;
-
-            if (nodes.length === 0) {
-                container.innerHTML = '<div class="empty-nodes">还没有添加节点</div>';
+            if (!nodes.length) {
+                container.innerHTML = '<div class="empty-state" style="padding:30px"><p style="color:var(--text-tertiary)">还没有添加节点</p></div>';
                 return;
             }
-
             container.innerHTML = nodes.map(n => {
-                const isLocal = n.id === '{{ node_id }}';
-                const statusClass = n.status === 'online' ? 'online' : n.status === 'offline' ? 'offline' : 'unknown';
-                const savePath = n.save_path || (isLocal ? '{{ download_dir }}' : '--');
-                return `
-                    <div class="node-item" data-node-id="${attr(n.id)}">
-                        <span class="node-dot ${statusClass}"></span>
-                        <div class="node-body">
-                            <div class="node-top">
-                                <div class="node-name">${esc(n.name || n.id)}</div>
-                                <select class="type-select" style="justify-content:flex-start;max-width:none;" data-orig="${n.node_type || 'full'}" onchange="changeNodeType('${attr(n.id)}', this)">
-                                    <option value="full" ${n.node_type === 'full' ? 'selected' : ''}>📤📥 上下节点</option>
-                                    <option value="download" ${n.node_type === 'download' ? 'selected' : ''}>📥 仅下载</option>
-                                    <option value="upload" ${n.node_type === 'upload' ? 'selected' : ''}>📤 仅上传</option>
-                                </select>
-                            </div>
-                            <div class="node-meta">${esc(n.host)}:${n.port} &middot; <span class="status-tag ${statusClass}">${n.status}</span></div>
-                            <div class="node-path">
-                                <span class="path-label">📁 ${esc(savePath)}</span>
-                                <button class="btn-edit" onclick="editNodePath('${attr(n.id)}')">✏️ 修改</button>
-                            </div>
-                        </div>
-                        <div class="node-actions">
-                            <button class="btn btn-danger btn-sm" onclick="removeNode('${attr(n.id)}')">🗑️ 删除</button>
-                        </div>
-                    </div>
-                `;
+                const statusClass = n.status==='online'?'online':n.status==='offline'?'offline':'unknown';
+                const savePath = n.save_path || '--';
+                return '<div class="node-item" data-node-id="'+attr(n.id)+'">' +
+                    '<span class="node-dot '+statusClass+'"></span>' +
+                    '<div class="node-info">' +
+                    '<div class="node-name">'+esc(n.name||n.id)+'</div>' +
+                    '<div class="node-desc">'+esc(n.host)+':'+n.port+'</div>' +
+                    '<div style="font-size:.80rem;color:var(--text-tertiary);margin-top:2px">📁 '+esc(savePath)+'</div>' +
+                    '</div>' +
+                    '<div class="node-right">' +
+                    '<div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;justify-content:flex-end">' +
+                    '<select class="btn btn-sm" onchange="changeNodeType(\''+attr(n.id)+'\',this)" style="font-size:.80rem;padding:2px 6px">' +
+                    '<option value="full"'+(n.node_type==='full'?' selected':'')+'>上下</option>' +
+                    '<option value="download"'+(n.node_type==='download'?' selected':'')+'>下载</option>' +
+                    '<option value="upload"'+(n.node_type==='upload'?' selected':'')+'>上传</option>' +
+                    '</select>' +
+                    '<button class="btn btn-sm" onclick="editNodePath(\''+attr(n.id)+'\')">📁</button>' +
+                    '</div>' +
+                    '<div class="node-status-text" style="color:'+(n.status==='online'?'var(--green)':'var(--text-tertiary)')+'">'+n.status+'</div>' +
+                    '<button class="btn btn-sm" style="margin-top:4px;font-size:.80rem" onclick="removeNode(\''+attr(n.id)+'\')">🗑️ 删除</button>' +
+                    '</div></div>';
             }).join('');
         }
 
         async function changeNodeType(nodeId, sel) {
-            const val = sel.value;
-            const orig = sel.dataset.orig;
-            if (val === orig) return;
             try {
-                const res = await fetch('/api/node/update', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ node_id: nodeId, node_type: val })
-                });
-                const data = await res.json();
-                if (data.status === 'updated') {
-                    sel.dataset.orig = val;
-                    // 刷新节点列表以更新状态
-                    loadNodes();
-                }
-            } catch (err) {
-                alert('更新类型失败: ' + err.message);
-                sel.value = sel.dataset.orig;
-            }
+                await fetch('/api/node/update', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({node_id:nodeId,node_type:sel.value}) });
+                loadNodes();
+            } catch(err) { alert('更新失败: '+err.message); sel.value = sel.dataset.orig; }
         }
 
         async function removeNode(nodeId) {
-            if (!confirm(`确定删除节点 ${nodeId}？`)) return;
+            if (!confirm('确定删除节点 '+nodeId+'？')) return;
             try {
-                const res = await fetch('/api/node/remove', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ node_id: nodeId })
-                });
-                const data = await res.json();
-                if (data.status === 'removed') loadNodes();
-            } catch (err) {
-                alert('删除失败: ' + err.message);
-            }
+                await fetch('/api/node/remove', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({node_id:nodeId}) });
+                loadNodes();
+            } catch(err) { alert('删除失败: '+err.message); }
         }
-
-        // --- Directory picker state ---
-        let _pickerNodeId = null;
 
         async function editNodePath(nodeId) {
             _pickerNodeId = nodeId;
@@ -616,128 +212,54 @@
             loadDir('/');
         }
 
-        function closeDirPicker() {
-            document.getElementById('dirPicker').classList.remove('active');
-            _pickerNodeId = null;
-        }
+        function closeDirPicker() { document.getElementById('dirPicker').classList.remove('active'); _pickerNodeId = null; }
 
         async function loadDir(path) {
             const listEl = document.getElementById('dirList');
             const pathEl = document.getElementById('dirCurrentPath');
             const inputEl = document.getElementById('dirPathInput');
-            pathEl.textContent = path;
-            inputEl.value = path;
-            listEl.innerHTML = '<div class="dir-item"><span class="dir-icon">\u23f3</span><span class="dir-name">加载中...</span></div>';
+            pathEl.textContent = path; inputEl.value = path;
+            listEl.innerHTML = '<div class="dir-item"><span class="dir-icon">⏳</span><span class="dir-name">加载中...</span></div>';
             try {
-                const res = await fetch('/api/browse?path=' + encodeURIComponent(path));
+                const res = await fetch('/api/browse?path='+encodeURIComponent(path));
                 const data = await res.json();
-                if (data.error) {
-                    listEl.innerHTML = '<div class="dir-item" style="color:var(--red);">\u274c ' + data.error + '</div>';
-                    return;
-                }
+                if (data.error) { listEl.innerHTML = '<div class="dir-item" style="color:var(--red)">❌ '+data.error+'</div>'; return; }
                 let html = '';
-                if (data.parent) {
-                    const parentEsc = attr(data.parent);
-                    html += '<div class="dir-item parent" onclick="loadDir(\'' + parentEsc + '\')">'
-                        + '<span class="dir-icon">\ud83d\udcc2</span><span class="dir-name">.. 上级目录</span></div>';
-                }
+                if (data.parent) html += '<div class="dir-item parent" onclick="loadDir(\''+attr(data.parent)+'\')">📂 <span class="dir-name">.. 上级目录</span></div>';
                 for (const item of data.items) {
-                    const count = item.items >= 0 ? ' (' + item.items + ')' : '';
-                    const pathEsc = attr(item.path);
-                    html += '<div class="dir-item" onclick="loadDir(\'' + pathEsc + '\')">'
-                        + '<span class="dir-icon">\ud83d\udcc1</span>'
-                        + '<span class="dir-name">' + esc(item.name) + '</span>'
-                        + '<span class="dir-count">' + count + '</span></div>';
+                    const count = item.items>=0 ? ' ('+item.items+')' : '';
+                    html += '<div class="dir-item" onclick="loadDir(\''+attr(item.path)+'\')">📁 <span class="dir-name">'+esc(item.name)+'</span><span class="dir-count">'+count+'</span></div>';
                 }
-                if (data.items.length === 0) {
-                    html += '<div class="dir-item" style="color:var(--text-muted);">\ud83d\udcc1 空目录</div>';
-                }
+                if (!data.items.length) html += '<div class="dir-item" style="color:var(--text-muted)">📁 空目录</div>';
                 listEl.innerHTML = html;
-            } catch (err) {
-                listEl.innerHTML = '<div class="dir-item" style="color:var(--red);">\u274c 加载失败: ' + err.message + '</div>';
-            }
+            } catch(err) { listEl.innerHTML = '<div class="dir-item" style="color:var(--red)">❌ 加载失败: '+err.message+'</div>'; }
         }
 
         async function mkdirInPicker() {
             const path = document.getElementById('dirPathInput').value.trim();
-            if (!path) return alert('请输入目录路径');
+            if (!path) return;
             const name = prompt('请输入新目录名称:');
             if (!name) return;
-            const newPath = path.endsWith('/') ? path + name : path + '/' + name;
             try {
-                const res = await fetch('/api/browse/mkdir', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: newPath })
-                });
+                const res = await fetch('/api/browse/mkdir', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path: path+(path.endsWith('/')?'':'/')+name}) });
                 const data = await res.json();
-                if (data.status === 'created') {
-                    loadDir(path);
-                } else {
-                    alert('创建失败: ' + (data.error || 'unknown'));
-                }
-            } catch (err) {
-                alert('创建失败: ' + err.message);
-            }
+                if (data.status==='created') loadDir(path);
+                else alert('创建失败: '+(data.error||'unknown'));
+            } catch(err) { alert('创建失败: '+err.message); }
         }
 
         async function confirmDirPicker() {
             const path = document.getElementById('dirPathInput').value.trim();
-            if (!path) return alert('请选择或输入目录路径');
-            const nodeId = _pickerNodeId;
-            if (!nodeId) return;
+            if (!path || !_pickerNodeId) return;
             try {
-                const res = await fetch('/api/node/update', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ node_id: nodeId, save_path: path })
-                });
+                const res = await fetch('/api/node/update', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({node_id:_pickerNodeId, save_path:path}) });
                 const data = await res.json();
-                if (data.status === 'updated') {
-                    closeDirPicker();
-                    loadNodes();
-                } else {
-                    alert('保存失败: ' + (data.error || 'unknown'));
-                }
-            } catch (err) {
-                alert('保存失败: ' + err.message);
-            }
+                if (data.status==='updated') { closeDirPicker(); loadNodes(); }
+                else alert('保存失败: '+(data.error||'unknown'));
+            } catch(err) { alert('保存失败: '+err.message); }
         }
 
         function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
         function attr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
     </script>
-    <!-- 目录选择器弹窗 -->
-    <div class="modal-overlay" id="dirPicker">
-        <div class="modal-box">
-            <div class="modal-head">
-                <span>选择保存目录</span>
-                <span class="modal-close" onclick="closeDirPicker()">✕</span>
-            </div>
-            <div class="modal-current-path" id="dirCurrentPath">/</div>
-            <div class="modal-body" id="dirList">
-                <div class="dir-item">
-                    <span class="dir-icon">📁</span>
-                    <span class="dir-name">加载中...</span>
-                </div>
-            </div>
-            <div class="modal-foot">
-                <input class="modal-path-input" id="dirPathInput" placeholder="或直接输入路径" spellcheck="false">
-                <button class="btn btn-sm" onclick="mkdirInPicker()">📁 新建</button>
-                <button class="btn btn-success btn-sm" onclick="confirmDirPicker()">✅ 确认</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Overlay click to close
-        document.getElementById('dirPicker').addEventListener('click', function(e) {
-            if (e.target === this) closeDirPicker();
-        });
-        // Enter key in path input
-        document.getElementById('dirPathInput').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') loadDir(this.value.trim());
-        });
-    </script>
-</body>
-</html>
+{% endblock %}
