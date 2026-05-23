@@ -349,6 +349,7 @@
         }
         function closePwModal() { document.getElementById('pwModal').classList.remove('active'); }
         // ── 通行密钥 ──
+        console.log('🏁 nodes page loaded, navigator.credentials =', !!navigator.credentials);
         async function loadPasskeys() {
             try {
                 const res = await fetch('/api/auth/passkey/list', {method:'POST', headers:{'Content-Type':'application/json'}});
@@ -366,15 +367,24 @@
             } catch(e) {}
         }
         async function addPasskey() {
+            console.log('addPasskey clicked');
+            if (!navigator.credentials || !navigator.credentials.create) {
+                alert('❌ 当前浏览器不支持 WebAuthn（请使用现代浏览器，需要 HTTPS 环境）');
+                return;
+            }
             const name = prompt('为这个通行密钥起个名字（可选）:', '我的密钥');
             if (name === null) return;
             try {
                 // 1. 获取注册选项
+                console.log('Fetching register/begin...');
                 const begin = await fetch('/api/auth/passkey/register/begin', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name: name||'我的密钥'})});
                 const opts = await begin.json();
-                if (opts.error) { alert(opts.error); return; }
+                console.log('register/begin response:', opts);
+                if (opts.error) { alert('服务端错误: ' + opts.error); return; }
+                if (!opts.publicKey) { alert('❌ 服务端返回缺少 publicKey'); return; }
 
                 // 2. 创建凭据
+                console.log('Calling navigator.credentials.create...');
                 const credential = await navigator.credentials.create({publicKey: opts.publicKey});
                 if (!credential) { alert('操作被取消'); return; }
 
