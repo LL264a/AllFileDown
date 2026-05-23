@@ -1,14 +1,17 @@
 """
 Allfiledown — 配置管理
 """
+
+from __future__ import annotations
+
 import json
-import os
 from pathlib import Path
+from typing import Any
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = BASE_DIR / "config.json"
+BASE_DIR: Path = Path(__file__).resolve().parent.parent
+CONFIG_PATH: Path = BASE_DIR / "config.json"
 
-DEFAULT_CONFIG = {
+DEFAULT_CONFIG: dict[str, Any] = {
     "node_id": "sk",
     "node_name": "S.K. (本机)",
     "host": "0.0.0.0",
@@ -20,25 +23,30 @@ DEFAULT_CONFIG = {
         "host": "127.0.0.1",
         "port": 1068,
         "secret": "Lr145ar",
-        "tls": True
+        "tls": True,
     },
     "auth_token": "allfiledown-default-token",
-    "peers": []
+    "peers": [],
 }
 
 
-def load_config():
+def load_config() -> dict[str, Any]:
+    """加载配置文件，不存在或损坏时返回默认配置"""
     if CONFIG_PATH.exists():
-        with open(CONFIG_PATH) as f:
-            cfg = json.load(f)
-        return cfg
+        try:
+            return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError, OSError):
+            return dict(DEFAULT_CONFIG)
     return dict(DEFAULT_CONFIG)
 
 
-def save_config(cfg):
+def save_config(cfg: dict[str, Any]) -> None:
+    """保存配置到文件"""
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(cfg, f, indent=2, ensure_ascii=False)
+    CONFIG_PATH.write_text(
+        json.dumps(cfg, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
-config = load_config()
+config: dict[str, Any] = load_config()

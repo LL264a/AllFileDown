@@ -716,3 +716,174 @@ a:hover { text-decoration: underline; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-color-hover); }
+
+/* ===== Mobile (≤768px) ===== */
+@media (max-width: 768px) {
+    :root {
+        --space-xl: 12px;
+        --space-lg: 10px;
+        --container-max: 100%;
+    }
+
+    .topbar-nav a {
+        padding: 0 10px;
+        font-size: 1.1rem;
+    }
+    .topbar-logo { font-size: 1rem; }
+    .topbar-logo span { display: none; }
+
+    .container { padding: 0 8px; }
+
+    .gh-file-list-header {
+        display: none;
+    }
+    .gh-file-row {
+        flex-wrap: wrap;
+        padding: 6px 4px;
+        gap: 2px 6px;
+    }
+    .gh-file-row .row-name {
+        width: auto;
+        flex: 1 1 calc(100% - 100px);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .gh-file-row .row-size,
+    .gh-file-row .row-time {
+        font-size: 0.72rem;
+        color: var(--text-tertiary);
+    }
+    .gh-file-row .row-actions {
+        width: 100%;
+        justify-content: flex-end;
+        gap: 4px;
+        margin-top: 2px;
+    }
+    .gh-file-row .row-actions button {
+        font-size: 0.78rem;
+        padding: 2px 6px;
+    }
+
+    .filter-pills {
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+    .filter-pill {
+        font-size: 0.78rem;
+        padding: 3px 8px;
+    }
+
+    .form-section .form-body {
+        padding: 8px;
+    }
+    .form-inline {
+        flex-direction: column;
+        gap: 6px;
+    }
+    .form-inline .input {
+        width: 100%;
+        font-size: 16px; /* prevent iOS zoom */
+    }
+    .form-inline .btn {
+        width: 100%;
+    }
+
+    .search-wrap {
+        margin: 8px 0;
+    }
+
+    .batch-bar {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .stats-bar {
+        flex-direction: column;
+        gap: 2px;
+        padding: 6px 10px;
+    }
+
+    .source-sheet {
+        width: 95%;
+        max-height: 70vh;
+    }
+
+    .preview-body img {
+        max-width: 100%;
+        max-height: 55vh;
+    }
+
+    .task-card {
+        padding: 8px;
+    }
+    .task-info {
+        flex-direction: column;
+        gap: 4px;
+    }
+    .task-actions {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    .task-actions button,
+    .task-actions .btn {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+    }
+
+    .node-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .detail-grid {
+        grid-template-columns: 70px 1fr;
+        font-size: 0.78rem;
+    }
+
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    .page-header h1 {
+        font-size: 1rem;
+    }
+}
+
+/* ===== Small phones (≤480px) ===== */
+@media (max-width: 480px) {
+    .topbar-nav {
+        gap: 0;
+    }
+    .topbar-nav a {
+        padding: 0 8px;
+    }
+    .topbar-logo {
+        font-size: 0.9rem;
+    }
+    .topbar-logo span {
+        display: none;
+    }
+    .topbar-right {
+        display: none;
+    }
+
+    .gh-file-row .row-name {
+        font-size: 0.82rem;
+    }
+    .gh-file-row .row-size,
+    .gh-file-row .row-time {
+        display: inline;
+        font-size: 0.7rem;
+    }
+
+    .filter-pills {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 4px;
+    }
+    .filter-pills::-webkit-scrollbar {
+        height: 2px;
+    }
+}
+

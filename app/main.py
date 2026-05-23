@@ -1,79 +1,92 @@
 """
 Allfiledown — FastAPI 应用
 """
+
+from __future__ import annotations
+
 import asyncio
 import logging
 import logging.handlers
 from pathlib import Path
+from typing import Any
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from app.database import init_db
-from app.config import config
-from app.web.routes import router as web_router
+
 from app.api.routes import router as api_router
+from app.config import config
+from app.database import init_db
+from app.web.routes import router as web_router
 
-# === 日志 ===
-log_dir = Path(config.get("download_dir", "/data/new/allfiledown") )
-log_file = str((log_dir.parent / "logs" / "afd.log").resolve())
-Path(log_file).parent.mkdir(parents=True, exist_ok=True)
-log_handler = logging.handlers.RotatingFileHandler(
-    log_file, maxBytes=10*1024*1024, backupCount=3, encoding="utf-8"
+# === 日志初始化 ===
+_log_dir = Path(config.get("download_dir", "/data/new/allfiledown"))
+_log_file = str((_log_dir.parent / "logs" / "afd.log").resolve())
+Path(_log_file).parent.mkdir(parents=True, exist_ok=True)
+_log_handler = logging.handlers.RotatingFileHandler(
+    _log_file,
+    maxBytes=10 * 1024 * 1024,
+    backupCount=3,
+    encoding="utf-8",
 )
-log_handler.setFormatter(logging.Formatter(
-    "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-))
+_log_handler.setFormatter(
+    logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+)
 
-# Remove default handlers to avoid duplicate console logs
-for h in logging.getLogger().handlers:
+# 清理默认 handler 避免控制台重复日志
+for h in list(logging.getLogger().handlers):
     logging.getLogger().removeHandler(h)
 
 # Root logger
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-root_logger.addHandler(log_handler)
+_log_root = logging.getLogger()
+_log_root.setLevel(logging.INFO)
+_log_root.addHandler(_log_handler)
 
 # Uvicorn loggers
-uvicorn_logger = logging.getLogger("uvicorn")
-uvicorn_logger.addHandler(log_handler)
-uvicorn_access = logging.getLogger("uvicorn.access")
-uvicorn_access.addHandler(log_handler)
+for name in ("uvicorn", "uvicorn.access"):
+    lg = logging.getLogger(name)
+    lg.addHandler(_log_handler)
 
-# AFD-specific loggers
+# AFD logger
 logger = logging.getLogger("afd")
+logger.info("=" * 50)
+logger.info("🚀 AFD starting...")
 
-logging.info("=" * 50)
-logging.info("🚀 AFD starting...")
-
-app = FastAPI(title="Allfiledown", version="0.1.0")
+# === FastAPI 应用 ===
+app: FastAPI = FastAPI(title="Allfiledown", version="0.1.0")
 
 # 静态文件
-static_dir = Path(__file__).parent / "web" / "static"
-static_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+_static_dir = Path(__file__).parent / "web" / "static"
+_static_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 # 注册路由
 app.include_router(web_router)
 app.include_router(api_router)
 
-# 数据目录
-download_dir = Path(config["download_dir"])
-download_dir.mkdir(parents=True, exist_ok=True)
+# 下载目录
+_download_dir = Path(config["download_dir"])
+_download_dir.mkdir(parents=True, exist_ok=True)
 
 
 @app.on_event("startup")
-async def startup():
+async def startup() -> None:
+    """应用启动时的初始化"""
     init_db()
 
     # 启动文件服务器（内部源文件下载，端口 18791）
     try:
-        from app.agent.fileserver import create_file_server
         from aiohttp import web
 
-        fs_app = create_file_server(config["download_dir"])
+        from app.agent.fileserver import create_file_server
+
+        fs_app: web.Application = create_file_server(config["download_dir"])
         fs_app["node_id"] = config.get("node_id", "sk")
         fs_app["file_token"] = config.get("file_token", "")
 
-        async def _run_fileserver():
+        async def _run_fileserver() -> None:
             runner = web.AppRunner(fs_app)
             await runner.setup()
             site = web.TCPSite(runner, "0.0.0.0", 18791)
@@ -85,15 +98,18 @@ async def startup():
         asyncio.create_task(_run_fileserver())
         logger.info("File server started on port 18791")
     except Exception as e:
-        logger.warning(f"File server startup failed: {e}")
+        logger.warning("File server startup failed: %s", e)
 
-    from app.agent.orchestrator import Orchestrator
+    # 启动任务编排器
     import app.agent.orchestrator as orch_mod
-    orch = Orchestrator()
+    from app.agent.orchestrator import Orchestrator
+
+    orch: Orchestrator = Orchestrator()
     await orch.start()
     orch_mod.orchestrator = orch
+    logger.info("Orchestrator started")
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, Any]:
     return {"status": "ok", "node": config["node_id"]}

@@ -1,17 +1,20 @@
 """
 Allfiledown — SQLite 数据库
 """
+
+from __future__ import annotations
+
 import sqlite3
 import threading
-from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "allfiledown.db"
+DB_PATH: Path = Path(__file__).resolve().parent.parent / "data" / "allfiledown.db"
 
-_local = threading.local()
+_local: threading.local = threading.local()
 
 
-def get_db():
+def get_db() -> sqlite3.Connection:
+    """获取当前线程的数据库连接（线程局部单例）"""
     if not hasattr(_local, "conn") or _local.conn is None:
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         _local.conn = sqlite3.connect(str(DB_PATH))
@@ -21,18 +24,23 @@ def get_db():
     return _local.conn
 
 
-def init_db():
+def _migrate(conn: sqlite3.Connection) -> None:
+    """执行增量 schema 迁移"""
+    migrations = [
+        ("ALTER TABLE nodes ADD COLUMN save_path TEXT DEFAULT ''", "duplicate column"),
+        ("ALTER TABLE task_nodes ADD COLUMN download_speed INTEGER DEFAULT 0", "duplicate column"),
+    ]
+    for sql, ignore_msg in migrations:
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError as e:
+            if ignore_msg not in str(e).lower():
+                raise
+
+
+def init_db() -> sqlite3.Connection:
+    """初始化数据库表结构并执行迁移"""
     conn = get_db()
-    # 迁移：确保 save_path 列存在
-    try:
-        conn.execute("ALTER TABLE nodes ADD COLUMN save_path TEXT DEFAULT ''")
-    except sqlite3.OperationalError:
-        pass  # 列已存在
-    # 迁移：确保 download_speed 列存在
-    try:
-        conn.execute("ALTER TABLE task_nodes ADD COLUMN download_speed INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # 列已存在
 
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS nodes (
@@ -82,20 +90,32 @@ def init_db():
         );
     """)
     conn.commit()
+    _migrate(conn)
+    return conn
 
 
-def add_event(task_id, node_id, event_type, payload=None):
-    conn = get_db()
+def add_event(
+    task_id: str,
+    node_id: str,
+    event_type: str,
+    payload: str | None = None,
+    db: sqlite3.Connection | None = None,
+) -> None:
+    """记录一条事件到 events 表"""
+    conn = db or get_db()
     conn.execute(
         "INSERT INTO events (task_id, node_id, event_type, payload) VALUES (?, ?, ?, ?)",
-        (task_id, node_id, event_type, payload)
+        (task_id, node_id, event_type, payload),
     )
     conn.commit()
 
 
-def get_events_since(since_id):
-    conn = get_db()
-    return conn.execute(
-        "SELECT * FROM events WHERE id > ? ORDER BY id",
-        (since_id,)
-    ).fetchall()
+def get_events_since(since_id: int, db: sqlite3.Connection | None = None) -> list[sqlite3.Row]:
+    """获取指定 ID 之后的所有事件"""
+    conn = db or get_db()
+    return list(
+        conn.execute(
+            "SELECT * FROM events WHERE id > ? ORDER BY id",
+            (since_id,),
+        ).fetchall()
+    )

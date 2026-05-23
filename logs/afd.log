@@ -26,3 +26,9 @@
 2026-05-23 01:23:30 [INFO] 127.0.0.1 [23/May/2026:01:23:30 +0800] "GET /health HTTP/1.1" 200 189 "-" "curl/8.5.0"
 2026-05-23 01:24:11 [INFO] 127.0.0.1 [23/May/2026:01:24:11 +0800] "GET /health HTTP/1.1" 200 189 "-" "curl/8.5.0"
 2026-05-23 01:24:11 [INFO] 127.0.0.1 [23/May/2026:01:24:11 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz?token=allfiledown-default-token HTTP/1.1" 200 12512606 "-" "curl/8.5.0"
+2026-05-23 02:23:50 [INFO] 127.0.0.1 [23/May/2026:02:23:50 +0800] "GET /tasks/ HTTP/1.1" 404 193 "-" "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Mobile Safari/537.36"
+2026-05-23 02:25:57 [INFO] ==================================================
+2026-05-23 02:25:57 [INFO] 🚀 AFD starting...
+2026-05-23 02:25:58 [INFO] File server started on port 18791
+2026-05-23 02:25:58 [INFO] File server running on :18791
+2026-05-23 03:26:53 [INFO] 127.0.0.1 [23/May/2026:03:26:52 +0800] "GET /tasks/5f0d10ef-edd/frp_0.68.1_linux_arm64.tar.gz?token=allfiledown-default-token HTTP/1.1" 200 12512606 "https://af.ll264a.xyz/" "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Mobile Safari/537.36 EdgA/148.0.0.0"

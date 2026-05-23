@@ -6,6 +6,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         loadTasks();
+        startSmartRefresh();
 
         // Download form
         const form = document.getElementById('downloadForm');
@@ -323,8 +324,8 @@
                                 <span class="detail-label">链接</span><span class="detail-value" style="word-break:break-all;font-size:0.78rem"><a href="${esc(task.url)}" target="_blank" style="color:var(--accent)">${esc(task.url)}</a></span>
                                 <span class="detail-label">大小</span><span class="detail-value">${fmtSize(task.total_size) || '未知'}</span>
                                 ${task.downloaded_size ? `<span class="detail-label">已下载</span><span class="detail-value">${fmtSize(task.downloaded_size)}</span>` : ''}
-                                <span class="detail-label">创建时间</span><span class="detail-value" style="font-size:0.78rem">${task.created_at || '-'}</span>
-                                <span class="detail-label">更新时间</span><span class="detail-value" style="font-size:0.78rem">${task.updated_at || '-'}</span>
+                                <span class="detail-label">创建时间</span><span class="detail-value" style="font-size:0.78rem" data-time-iso="${task.created_at || ''}">${task.created_at ? timeAgo(task.created_at) : '-'}</span>
+                                <span class="detail-label">更新时间</span><span class="detail-value" style="font-size:0.78rem" data-time-iso="${task.updated_at || ''}">${task.updated_at ? timeAgo(task.updated_at) : '-'}</span>
                             </div>
                             ${subFilesHtml ? `
                                 <h4 style="margin:14px 0 8px;font-size:0.82rem;color:var(--text-secondary)">节点状态</h4>
@@ -364,6 +365,70 @@
     function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
     function attr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
 
-    // Auto refresh
-    setInterval(() => loadTasks(), 5000);
+    // ============ Time utils ============
+    function timeAgo(isoStr) {
+        if (!isoStr) return '';
+        const now = Date.now();
+        const then = new Date(isoStr).getTime();
+        if (isNaN(then)) return isoStr;
+        const diff = now - then;
+        const sec = Math.floor(diff / 1000);
+        if (sec < 5) return '刚刚';
+        if (sec < 60) return sec + '秒前';
+        const min = Math.floor(sec / 60);
+        if (min < 60) return min + '分钟前';
+        const hours = Math.floor(min / 60);
+        if (hours < 24) return hours + '小时前';
+        const days = Math.floor(hours / 24);
+        if (days < 7) return days + '天前';
+        // Fall back to date
+        const d = new Date(then);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+
+    // Apply time-ago via mutation observer (auto-convert [data-time-iso] elements)
+    let timeObserver = null;
+    function initTimeObserver() {
+        if (timeObserver) return;
+        timeObserver = new MutationObserver(() => {
+            document.querySelectorAll('[data-time-iso]').forEach(el => {
+                if (el.dataset.timeAgoProcessed) return;
+                el.dataset.timeAgoProcessed = '1';
+                const iso = el.getAttribute('data-time-iso');
+                el.textContent = timeAgo(iso);
+                el.title = iso || '';
+            });
+        });
+        timeObserver.observe(document.body, { childList: true, subtree: true });
+    }
+    initTimeObserver();
+
+    // ============ Smart Refresh ============
+    let _refreshTimer = null;
+    let _hasActiveTasks = false;
+
+    function startSmartRefresh() {
+        // Initial: fast refresh
+        scheduleRefresh(3000);
+    }
+
+    function scheduleRefresh(intervalMs) {
+        if (_refreshTimer) clearTimeout(_refreshTimer);
+        _refreshTimer = setTimeout(async () => {
+            try {
+                const res = await fetch('/api/task/list');
+                const data = await res.json();
+                const tasks = data.tasks || [];
+                _hasActiveTasks = tasks.some(t => ['downloading', 'pending', 'paused'].includes(t.status));
+                renderTasks(tasks);
+            } catch (err) {
+                console.error('Refresh:', err);
+            }
+            // Adjust interval based on activity
+            const nextInterval = _hasActiveTasks ? 3000 : 12000;
+            scheduleRefresh(nextInterval);
+        }, intervalMs);
+    }
+
 })();

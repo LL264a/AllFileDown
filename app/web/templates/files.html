@@ -11,13 +11,12 @@
         <div class="topbar-left">
             <div class="topbar-logo">AFD <span>&#x6587;&#x4ef6;&#x5e93;</span></div>
             <div class="topbar-nav">
-                <a href="/" class="active">&#x1f4c2; <span class="nav-label">&#x6587;&#x4ef6;</span></a>
-                <a href="/downloads">&#x1f4e5; <span class="nav-label">&#x4efb;&#x52a1;</span></a>
-                <a href="/nodes">&#x2699;&#xfe0f; <span class="nav-label">&#x8bbe;&#x7f6e;</span></a>
+                <a href="/" class="active">&#x1f4c2;</a>
+                <a href="/downloads">&#x1f4e5;</a>
+                <a href="/nodes">&#x2699;&#xfe0f;</a>
             </div>
         </div>
         <div class="topbar-right">
-            <span class="node-tag">{{ node_name }}</span>
         </div>
     </div>
 
@@ -182,7 +181,7 @@
 
         function renderRow(f) {
             const iconInfo = fileIcon(f.filename);
-            const time = formatTime(f.downloaded_at);
+            const hasTime = !!f.downloaded_at;
             const multiTag = f.multi_source ? '<span class="multi-source-tag">\u2295 \u591a\u6e90</span>' : '';
             const ext = f.filename.split('.').pop()?.toLowerCase();
             const imgExts = ['jpg','jpeg','png','gif','webp','svg'];
@@ -191,6 +190,9 @@
             const previewClick = canPreview ? 'onclick="previewFile(' + "'" + escAttr(f.task_id) + "','" + escAttr(f.filename) + "')" + '"' : '';
             const dlUrl = downloadUrl(f);
 
+            const timeIsoAttr = hasTime ? ' data-time-iso="' + escAttr(f.downloaded_at) + '"' : '';
+            const timeText = hasTime ? '' : '';
+
             return '<div class="gh-file-row" data-id="' + escAttr(f.task_id) + '">' +
                 '<span class="row-check">' +
                 '<input type="checkbox" class="file-check" data-id="' + escAttr(f.task_id) + '" onchange="updateBatchBar()">' +
@@ -198,7 +200,7 @@
                 '<span class="row-icon">' + iconInfo.emoji + '</span>' +
                 '<span class="row-name" ' + previewClick + ' title="' + escAttr(f.filename) + '">' + esc(f.filename) + multiTag + '</span>' +
                 '<span class="row-size">' + (f.size_formatted || formatSize(f.size) || '?') + '</span>' +
-                '<span class="row-time">' + time + '</span>' +
+                '<span class="row-time"' + timeIsoAttr + '>' + timeText + '</span>' +
                 '<span class="row-actions">' +
                 '<button class="btn-row btn-dl-row" onclick="window.open(' + "'" + escAttr(dlUrl) + "','_blank')" + '" title="\u4e0b\u8f7d">\u2b07</button>' +
                 '<button class="btn-row" onclick="showSources(event,' + "'" + escAttr(f.task_id) + "')" + '" title="\u9009\u62e9\u4e0b\u8f7d\u6e90">\u2295</button>' +
@@ -303,21 +305,8 @@
             }
         });
 
-        function formatTime(iso) {
-            if (!iso) return '';
-            try {
-                const d = new Date(iso);
-                if (isNaN(d.getTime())) return iso;
-                const now = new Date();
-                const diff = now - d;
-                if (diff < 60000) return '\u521a\u521a';
-                if (diff < 3600000) return Math.floor(diff/60000) + '\u5206\u949f\u524d';
-                if (diff < 86400000) return Math.floor(diff/3600000) + '\u5c0f\u65f6\u524d';
-                const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
-                const h = String(d.getHours()).padStart(2,'0'), min = String(d.getMinutes()).padStart(2,'0');
-                return y === now.getFullYear() ? m+'-'+day+' '+h+':'+min : y+'-'+m+'-'+day+' '+h+':'+min;
-            } catch { return iso; }
-        }
+        // formatTime still available but not used in renderRow anymore
+        // (app.js timeAgo handles data-time-iso elements)
 
         function formatSize(bytes) {
             if (!bytes || bytes === 0) return '';
