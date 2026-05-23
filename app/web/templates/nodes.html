@@ -113,7 +113,13 @@
                         <button class="btn btn-sm" onclick="copyApiKey()">📋 复制</button>
                         <button class="btn btn-sm" onclick="regenerateApiKey()">🔄 重新生成</button>
                     </span>
+                    <span class="label">通行密钥</span>
+                    <span class="value">
+                        <button class="btn btn-sm" onclick="addPasskey()">🔑 添加通行密钥</button>
+                        <span id="passkeyCount" style="font-size:.82rem;color:var(--text-tertiary);margin-left:8px"></span>
+                    </span>
                 </div>
+                <div id="passkeyList" style="margin-top:8px"></div>
             </div>
         </div>
 
@@ -169,6 +175,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadNodes();
             loadApiKey();
+            loadPasskeys();
             document.getElementById('nodeForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const nodeId = document.getElementById('nodeId').value.trim();
@@ -341,6 +348,64 @@
             ['curPassword','newPassword','confirmPassword'].forEach(id => document.getElementById(id).value='');
         }
         function closePwModal() { document.getElementById('pwModal').classList.remove('active'); }
+        // ── 通行密钥 ──
+        async function loadPasskeys() {
+            try {
+                const res = await fetch('/api/auth/passkey/list', {method:'POST', headers:{'Content-Type':'application/json'}});
+                const data = await res.json();
+                const creds = data.credentials || [];
+                document.getElementById('passkeyCount').textContent = creds.length ? creds.length+' 个已注册' : '暂无';
+                const list = document.getElementById('passkeyList');
+                if (!creds.length) { list.innerHTML = ''; return; }
+                list.innerHTML = creds.map(c =>
+                    '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:.85rem;border-bottom:1px solid var(--border-color)">' +
+                    '<span>🔑 ' + esc(c.name||'通行密钥') + '</span>' +
+                    '<span style="color:var(--text-tertiary);font-size:.78rem;flex:1">' + (c.created_at||'') + '</span>' +
+                    '<button class="btn btn-sm" onclick="removePasskey(\'' + c.id + '\')">🗑️</button></div>'
+                ).join('');
+            } catch(e) {}
+        }
+        async function addPasskey() {
+            const name = prompt('为这个通行密钥起个名字（可选）:', '我的密钥');
+            if (name === null) return;
+            try {
+                // 1. 获取注册选项
+                const begin = await fetch('/api/auth/passkey/register/begin', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name: name||'我的密钥'})});
+                const opts = await begin.json();
+                if (opts.error) { alert(opts.error); return; }
+
+                // 2. 创建凭据
+                const credential = await navigator.credentials.create({publicKey: opts.publicKey});
+                if (!credential) { alert('操作被取消'); return; }
+
+                // 3. 验证并存储
+                const complete = await fetch('/api/auth/passkey/register/complete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+                    challenge_id: opts.challenge_id,
+                    name: name||'我的密钥',
+                    credential: credential.toJSON()
+                })});
+                const result = await complete.json();
+                if (result.success) {
+                    alert('✅ 通行密钥注册成功！');
+                    loadPasskeys();
+                } else {
+                    alert('❌ 注册失败: ' + (result.error||'unknown'));
+                }
+            } catch(e) {
+                if (e.name === 'NotAllowedError') { /* user cancelled */ return; }
+                alert('❌ 出错: ' + e.message);
+            }
+        }
+        async function removePasskey(id) {
+            if (!confirm('确定删除这个通行密钥？')) return;
+            try {
+                const res = await fetch('/api/auth/passkey/remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})});
+                const data = await res.json();
+                if (data.success) loadPasskeys();
+                else alert('删除失败');
+            } catch(e) { alert('删除失败: '+e.message); }
+        }
+
         async function changePassword() {
             const cur = document.getElementById('curPassword').value.trim();
             const npw = document.getElementById('newPassword').value.trim();

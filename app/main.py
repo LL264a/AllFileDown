@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import router as api_router
 from app.config import config
 from app.database import init_db
+from app.web.passkey import router as passkey_router
 from app.web.routes import router as web_router
 
 # === 日志初始化 ===
@@ -65,6 +66,7 @@ app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 # 注册路由
 app.include_router(web_router)
 app.include_router(api_router)
+app.include_router(passkey_router)
 
 # 下载目录
 _download_dir = Path(config["download_dir"])

@@ -80,6 +80,16 @@ def init_db() -> sqlite3.Connection:
             PRIMARY KEY (task_id, node_id)
         );
 
+        CREATE TABLE IF NOT EXISTS passkey_credentials (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL DEFAULT 'admin',
+            credential_id BLOB NOT NULL,
+            public_key BLOB NOT NULL,
+            sign_count INTEGER DEFAULT 0,
+            name TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_id TEXT,
