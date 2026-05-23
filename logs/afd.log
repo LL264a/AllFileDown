@@ -62,3 +62,40 @@
 2026-05-23 13:09:26 [INFO] Orchestrator background loops started
 2026-05-23 13:09:26 [INFO] Orchestrator started
 2026-05-23 13:09:26 [INFO] File server running on :18791
+2026-05-23 13:16:46 [INFO] ==================================================
+2026-05-23 13:16:46 [INFO] 🚀 AFD starting...
+2026-05-23 13:16:46 [INFO] File server started on port 18791
+2026-05-23 13:16:46 [INFO] Orchestrator background loops started
+2026-05-23 13:16:46 [INFO] Orchestrator started
+2026-05-23 13:16:46 [INFO] File server running on :18791
+2026-05-23 13:17:53 [INFO] ==================================================
+2026-05-23 13:17:53 [INFO] 🚀 AFD starting...
+2026-05-23 13:17:53 [INFO] File server started on port 18791
+2026-05-23 13:17:53 [INFO] Orchestrator background loops started
+2026-05-23 13:17:53 [INFO] Orchestrator started
+2026-05-23 13:17:53 [INFO] File server running on :18791
+2026-05-23 13:17:56 [INFO] _check_auth cookies={'afd_token': 'f5bf18ebcea352b51705e068ccfb9542abf7737175ce1eb7d79684ab712327ab'} headers_xtoken=
+2026-05-23 13:18:13 [INFO] _check_auth cookies={'afd_token': 'f5bf18ebcea352b51705e068ccfb9542abf7737175ce1eb7d79684ab712327ab'} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={'afd_token': 'f5bf18ebcea352b51705e068ccfb9542abf7737175ce1eb7d79684ab712327ab'} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={'afd_token': 'f5bf18ebcea352b51705e068ccfb9542abf7737175ce1eb7d79684ab712327ab'} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={'afd_token': 'f5bf18ebcea352b51705e068ccfb9542abf7737175ce1eb7d79684ab712327ab'} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={'afd_token': 'f5bf18ebcea352b51705e068ccfb9542abf7737175ce1eb7d79684ab712327ab'} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={'afd_token': 'f5bf18ebcea352b51705e068ccfb9542abf7737175ce1eb7d79684ab712327ab'} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={'afd_token': 'f5bf18ebcea352b51705e068ccfb9542abf7737175ce1eb7d79684ab712327ab'} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={} headers_xtoken=
+2026-05-23 13:18:19 [INFO] _check_auth cookies={'afd_token': 'f5bf18ebcea352b51705e068ccfb9542abf7737175ce1eb7d79684ab712327ab'} headers_xtoken=
+2026-05-23 13:18:26 [INFO] ==================================================
+2026-05-23 13:18:26 [INFO] 🚀 AFD starting...
+2026-05-23 13:18:26 [INFO] File server started on port 18791
+2026-05-23 13:18:26 [INFO] Orchestrator background loops started
+2026-05-23 13:18:26 [INFO] Orchestrator started
+2026-05-23 13:18:26 [INFO] File server running on :18791
+2026-05-23 13:20:44 [INFO] ==================================================
+2026-05-23 13:20:44 [INFO] 🚀 AFD starting...
+2026-05-23 13:20:44 [INFO] File server started on port 18791
+2026-05-23 13:20:44 [INFO] Orchestrator background loops started
+2026-05-23 13:20:44 [INFO] Orchestrator started
+2026-05-23 13:20:44 [INFO] File server running on :18791

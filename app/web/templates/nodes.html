@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}节点设置{% endblock %}
-{% block logo_subtitle %}设置{% endblock %}
+{% block logo_subtitle %}{% endblock %}
 {% block nav_nodes_class %}active{% endblock %}
 {% block extra_head %}
 <style>
@@ -97,6 +97,54 @@
             </div>
         </div>
 
+        <!-- 安全设置 -->
+        <div class="section-card" id="securitySection">
+            <div class="section-head"><h2>🔐 安全设置</h2></div>
+            <div class="section-body">
+                <div class="config-grid" style="margin-bottom:16px">
+                    <span class="label">登录密码</span>
+                    <span class="value">
+                        <span id="pwStatus">••••••••</span>
+                        <button class="btn btn-sm" onclick="showChangePw()" style="margin-left:8px">修改密码</button>
+                    </span>
+                    <span class="label">API 密钥</span>
+                    <span class="value" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <code id="apiKeyDisplay" style="font-size:.82rem;background:var(--bg-surface-alt);padding:4px 8px;border-radius:var(--radius-sm);word-break:break-all">——</code>
+                        <button class="btn btn-sm" onclick="copyApiKey()">📋 复制</button>
+                        <button class="btn btn-sm" onclick="regenerateApiKey()">🔄 重新生成</button>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 修改密码弹窗 -->
+        <div class="modal-overlay" id="pwModal">
+            <div class="modal-box" style="max-width:400px">
+                <div class="modal-head">
+                    <span>修改登录密码</span>
+                    <span class="modal-close" onclick="closePwModal()">✕</span>
+                </div>
+                <div style="padding:18px">
+                    <div id="pwError" style="display:none;background:var(--bg-danger);color:var(--red);padding:8px 12px;border-radius:var(--radius-sm);margin-bottom:12px;font-size:.85rem"></div>
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                        <div>
+                            <label style="display:block;font-size:.82rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px">当前密码</label>
+                            <input class="input" id="curPassword" type="password" placeholder="输入当前密码">
+                        </div>
+                        <div>
+                            <label style="display:block;font-size:.82rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px">新密码</label>
+                            <input class="input" id="newPassword" type="password" placeholder="新密码（至少6位）">
+                        </div>
+                        <div>
+                            <label style="display:block;font-size:.82rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px">确认新密码</label>
+                            <input class="input" id="confirmPassword" type="password" placeholder="再次输入">
+                        </div>
+                        <button class="btn btn-primary" onclick="changePassword()" style="margin-top:4px">✅ 保存密码</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Directory Picker Modal -->
         <div class="modal-overlay" id="dirPicker">
             <div class="modal-box">
@@ -120,6 +168,7 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             loadNodes();
+            loadApiKey();
             document.getElementById('nodeForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const nodeId = document.getElementById('nodeId').value.trim();
@@ -258,6 +307,63 @@
                 else alert('保存失败: '+(data.error||'unknown'));
             } catch(err) { alert('保存失败: '+err.message); }
         }
+
+        // ── API 密钥 ──
+        async function loadApiKey() {
+            try {
+                const res = await fetch('/api/auth/api-key', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'get'})});
+                const data = await res.json();
+                const el = document.getElementById('apiKeyDisplay');
+                if (data.api_key) el.textContent = data.api_key;
+            } catch(e) {}
+        }
+        function copyApiKey() {
+            const key = document.getElementById('apiKeyDisplay').textContent;
+            if (!key || key==='——') return;
+            navigator.clipboard.writeText(key).then(() => alert('API 密钥已复制')).catch(() => {});
+        }
+        async function regenerateApiKey() {
+            if (!confirm('重新生成后将清空旧的 API 密钥，确定？')) return;
+            try {
+                const res = await fetch('/api/auth/api-key', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'regenerate'})});
+                const data = await res.json();
+                if (data.success && data.api_key) {
+                    document.getElementById('apiKeyDisplay').textContent = data.api_key;
+                    alert('新 API 密钥已生成，请立即复制保存！');
+                } else alert('生成失败: '+(data.error||'unknown'));
+            } catch(e) { alert('生成失败: '+e.message); }
+        }
+
+        // ── 修改密码 ──
+        function showChangePw() {
+            document.getElementById('pwModal').classList.add('active');
+            document.getElementById('pwError').style.display = 'none';
+            ['curPassword','newPassword','confirmPassword'].forEach(id => document.getElementById(id).value='');
+        }
+        function closePwModal() { document.getElementById('pwModal').classList.remove('active'); }
+        async function changePassword() {
+            const cur = document.getElementById('curPassword').value.trim();
+            const npw = document.getElementById('newPassword').value.trim();
+            const cpw = document.getElementById('confirmPassword').value.trim();
+            const err = document.getElementById('pwError');
+            if (!cur) { err.textContent='请输入当前密码'; err.style.display='block'; return; }
+            if (npw.length < 6) { err.textContent='新密码至少 6 位'; err.style.display='block'; return; }
+            if (npw !== cpw) { err.textContent='两次输入的新密码不一致'; err.style.display='block'; return; }
+            try {
+                const res = await fetch('/api/auth/change-password', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({current_password:cur, new_password:npw})});
+                const data = await res.json();
+                if (data.success) {
+                    alert('密码修改成功！');
+                    closePwModal();
+                } else {
+                    err.textContent = data.error || '修改失败';
+                    err.style.display = 'block';
+                }
+            } catch(e) { err.textContent='请求失败: '+e.message; err.style.display='block'; }
+        }
+
+            document.getElementById('pwModal').addEventListener('click', function(e) { if (e.target===this) closePwModal(); });
+        });
 
         function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
         function attr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }

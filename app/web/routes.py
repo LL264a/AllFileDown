@@ -43,6 +43,7 @@ def _verify_password(input_pw: str, stored_pw: str) -> bool:
 
 
 def _check_auth(request: Request) -> bool:
+
     """检查是否已登录"""
     pw: str = str(config.get("web_password", ""))
     if not pw:
@@ -63,6 +64,16 @@ def _check_auth(request: Request) -> bool:
     body_token: str = request.headers.get("X-Auth-Token", "")
     if body_token and hmac.compare_digest(body_token, hashlib.sha256(pw.encode()).hexdigest()):
         return True
+    # API Key 验证（密码管理器、Kaspersky等）
+    api_key: str = str(config.get("api_key", ""))
+    if api_key:
+        key_from_header: str = request.headers.get("X-Api-Key", request.headers.get("apikey", ""))
+        if key_from_header and hmac.compare_digest(key_from_header, api_key):
+            return True
+        # cookie 形式
+        ckey: str = request.cookies.get("afd_apikey", "")
+        if ckey and hmac.compare_digest(ckey, api_key):
+            return True
     return False
 
 
@@ -143,6 +154,41 @@ async def api_auth_session(request: Request) -> dict[str, Any]:
         # 所以返回 token 让客户端设 cookie
         return {"authenticated": True, "token": token}
     return {"authenticated": False}
+
+
+@router.post("/api/auth/change-password")
+async def api_auth_change_password(request: Request) -> dict[str, Any]:
+    """修改密码"""
+    if not _check_auth(request):
+        return {"error": "未登录"}
+    data: dict[str, Any] = await request.json()
+    cur: str = data.get("current_password", "")
+    new_pw: str = data.get("new_password", "")
+    stored_pw: str = str(config.get("web_password", ""))
+    if not _verify_password(cur, stored_pw):
+        return {"error": "当前密码错误"}
+    if len(new_pw) < 6:
+        return {"error": "新密码至少 6 位"}
+    if new_pw == stored_pw:
+        return {"error": "新密码不能与当前密码相同"}
+    config["web_password"] = new_pw
+    save_config(config)
+    return {"success": True}
+
+
+@router.post("/api/auth/api-key")
+async def api_auth_api_key(request: Request) -> dict[str, Any]:
+    """获取或重新生成 API 密钥"""
+    if not _check_auth(request):
+        return {"error": "未登录"}
+    data: dict[str, Any] = await request.json()
+    action: str = data.get("action", "get")
+    if action == "regenerate":
+        api_key: str = secrets.token_hex(32)
+        config["api_key"] = api_key
+        save_config(config)
+        return {"success": True, "api_key": api_key}
+    return {"api_key": str(config.get("api_key", ""))}
 
 
 # ---- 受保护页面路由 ----

@@ -28,6 +28,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "tls": True,
     },
     "auth_token": "allfiledown-default-token",
+    "api_key": "",  # API 密钥（密码管理器、header 认证）
     "peers": [],
 }
 
