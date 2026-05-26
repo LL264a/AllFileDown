@@ -12,8 +12,9 @@ BASE_DIR: Path = Path(__file__).resolve().parent.parent
 CONFIG_PATH: Path = BASE_DIR / "config.json"
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "web_password": "",  # 网页登录密码，空=无密码
+    "web_password": "",  # 网页登录密码，空=未初始化/无密码
     "web_username": "admin",  # 网页登录用户名
+    "initialized": False,  # 首次启动时进入 /setup
     "node_id": "sk",
     "node_name": "S.K. (本机)",
     "host": "0.0.0.0",

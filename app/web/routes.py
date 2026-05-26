@@ -14,12 +14,26 @@ import aiohttp
 import hashlib
 import hmac
 import secrets
+from urllib.parse import urlparse
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import config, save_config
 from app.database import get_db
+from app.security import (
+    PathSecurityError,
+    add_audit_log,
+    create_api_token,
+    create_web_session,
+    hash_password,
+    needs_password_rehash,
+    revoke_web_session,
+    safe_join,
+    verify_api_token,
+    verify_password,
+    verify_web_session,
+)
 
 logger = logging.getLogger("afd")
 
@@ -37,9 +51,29 @@ def _make_session_token() -> str:
     return secrets.token_hex(32)
 
 
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else ""
+
+
+def _safe_download_file_path(task_id: str, filename: str) -> Path:
+    return safe_join(config["download_dir"], task_id, filename)
+
+
+def _auth_cookie_token(request: Request) -> str:
+    return request.cookies.get(_AUTH_COOKIE, "") or request.cookies.get("afd_token", "")
+
+
 def _verify_password(input_pw: str, stored_pw: str) -> bool:
-    """简单的密码验证，不存 hash（可后期升级）"""
-    return input_pw == stored_pw
+    """验证 Web 登录密码；兼容旧版明文配置。"""
+    return verify_password(input_pw, stored_pw)
+
+
+def _upgrade_password_hash_if_needed(password: str, stored_pw: str) -> None:
+    """登录成功后把旧明文密码自动升级为加密哈希。"""
+    if not stored_pw or not needs_password_rehash(stored_pw):
+        return
+    config["web_password"] = hash_password(password)
+    save_config(config)
 
 
 def _check_auth(request: Request) -> bool:
@@ -48,37 +82,100 @@ def _check_auth(request: Request) -> bool:
     pw: str = str(config.get("web_password", ""))
     if not pw:
         return True  # 无密码时不验证
-    # Cookie 验证
-    token: str = request.cookies.get(_AUTH_COOKIE, "")
-    if token:
-        expected: str = hashlib.sha256((pw + "_afd_session").encode()).hexdigest()
-        if hmac.compare_digest(token, expected):
-            return True
-    # afd_token cookie（前端 login 写入）
-    afd_token: str = request.cookies.get("afd_token", "")
-    if afd_token:
-        expected: str = hashlib.sha256((pw + "_afd_session").encode()).hexdigest()
-        if hmac.compare_digest(afd_token, expected):
-            return True
-    # Header/body token 验证（API调用、记住密码）
+    # Revocable session cookie
+    if verify_web_session(_auth_cookie_token(request)):
+        return True
+    # Header token remains password-derived for non-browser helpers, but is not persisted.
     body_token: str = request.headers.get("X-Auth-Token", "")
     if body_token and hmac.compare_digest(body_token, hashlib.sha256(pw.encode()).hexdigest()):
         return True
-    # API Key 验证（密码管理器、Kaspersky等）
-    api_key: str = str(config.get("api_key", ""))
-    if api_key:
-        key_from_header: str = request.headers.get("X-Api-Key", request.headers.get("apikey", ""))
-        if key_from_header and hmac.compare_digest(key_from_header, api_key):
-            return True
-        # cookie 形式
-        ckey: str = request.cookies.get("afd_apikey", "")
-        if ckey and hmac.compare_digest(ckey, api_key):
-            return True
+    # Revocable API token validation.
+    key_from_header: str = request.headers.get("X-Api-Key", request.headers.get("apikey", ""))
+    ckey: str = request.cookies.get("afd_apikey", "")
+    if verify_api_token(key_from_header) or verify_api_token(ckey):
+        return True
     return False
 
 
 def _login_redirect() -> RedirectResponse:
     return RedirectResponse(url="/login", status_code=302)
+
+
+def _is_initialized() -> bool:
+    """Return True when the web UI has completed first-run setup."""
+    username = str(config.get("web_username", "")).strip()
+    password = str(config.get("web_password", "")).strip()
+    if not username or not password:
+        return False
+    return bool(config.get("initialized", True))
+
+
+def _setup_redirect_if_needed(request: Request) -> RedirectResponse | None:
+    """Redirect protected browser pages to setup until first-run config exists."""
+    if _is_initialized() or request.url.path == "/setup":
+        return None
+    return RedirectResponse(url="/setup", status_code=302)
+
+
+def _normalize_public_base(public_host: str, port: int) -> str:
+    """Normalize a raw host or absolute URL into a public base URL."""
+    raw = public_host.strip().rstrip("/")
+    if raw.startswith(("http://", "https://")):
+        parsed = urlparse(raw)
+        if not parsed.netloc:
+            raise ValueError("公网地址格式错误")
+        return raw
+    if not raw or "://" in raw or "/" in raw:
+        raise ValueError("公网地址格式错误")
+    return f"http://{raw}:{port}"
+
+
+def _validate_setup_text(value: Any, field_name: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError(f"{field_name}为必填")
+    return text
+
+
+async def _apply_setup_payload(data: dict[str, Any]) -> dict[str, Any]:
+    username = _validate_setup_text(data.get("username"), "用户名")
+    password = str(data.get("password", ""))
+    password_confirm = str(data.get("password_confirm", ""))
+    download_dir = _validate_setup_text(data.get("download_dir"), "下载路径")
+    node_id = _validate_setup_text(data.get("node_id"), "节点 ID")
+    node_name = _validate_setup_text(data.get("node_name"), "节点名称")
+    public_host = _validate_setup_text(data.get("public_host"), "公网地址")
+
+    if len(password) < 6:
+        raise ValueError("密码至少 6 位")
+    if password != password_confirm:
+        raise ValueError("两次密码不一致")
+
+    download_path = Path(download_dir).expanduser()
+    if not download_path.is_absolute():
+        raise ValueError("下载路径必须是绝对路径")
+    download_path.mkdir(parents=True, exist_ok=True)
+
+    port = int(config.get("port", 18790))
+    public_base = _normalize_public_base(public_host, port)
+
+    config.update(
+        {
+            "initialized": True,
+            "web_username": username,
+            "web_password": hash_password(password),
+            "download_dir": str(download_path),
+            "node_id": node_id,
+            "node_name": node_name,
+            "host": public_host,
+            "peer_host": public_host,
+            "public_base_url": public_base,
+            "file_base_url": f"{public_base}/tasks",
+        }
+    )
+    save_config(config)
+    add_audit_log("setup.complete", actor=username, target="web", payload={"node_id": node_id})
+    return {"success": True, "redirect": "/login"}
 
 
 def _format_file_size(bytes_val: int | None) -> str:
@@ -107,9 +204,44 @@ def _resolve_public_host(host: str) -> str:
 # ---- Auth 路由 ----
 
 
+@router.get("/setup", response_class=HTMLResponse)
+async def setup_page(request: Request) -> HTMLResponse:
+    """首次初始化页面。"""
+    if _is_initialized():
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse(
+        request,
+        "setup.html",
+        {
+            "default_username": str(config.get("web_username", "admin") or "admin"),
+            "default_download_dir": str(config.get("download_dir", "/data/TrAr") or "/data/TrAr"),
+            "default_node_id": str(config.get("node_id", "") or ""),
+            "default_node_name": str(config.get("node_name", "") or ""),
+            "default_public_host": str(config.get("public_base_url", config.get("host", "")) or ""),
+        },
+    )
+
+
+@router.post("/api/setup")
+async def api_setup(request: Request) -> dict[str, Any]:
+    """保存首次初始化配置。"""
+    if _is_initialized():
+        return {"success": False, "error": "系统已初始化"}
+    try:
+        data: dict[str, Any] = await request.json()
+        return await _apply_setup_payload(data)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+    except OSError as exc:
+        return {"success": False, "error": f"下载路径不可用：{exc}"}
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request) -> HTMLResponse:
     """登录页"""
+    setup_redirect = _setup_redirect_if_needed(request)
+    if setup_redirect:
+        return setup_redirect
     return templates.TemplateResponse(request, "login.html", {})
 
 
@@ -122,10 +254,14 @@ async def api_auth_login(request: Request) -> dict[str, Any]:
     stored_pw: str = str(config.get("web_password", ""))
 
     if not stored_pw:
+        add_audit_log("auth.login.disabled", actor=username, target="web", ip=_client_ip(request))
         return {"authenticated": True, "redirect": "/"}
 
     if _verify_password(password, stored_pw):
+        _upgrade_password_hash_if_needed(password, stored_pw)
+        add_audit_log("auth.login.success", actor=username, target="web", ip=_client_ip(request))
         return {"authenticated": True, "redirect": "/"}
+    add_audit_log("auth.login.failure", actor=username, target="web", ip=_client_ip(request))
     return {"authenticated": False, "error": "用户名或密码错误"}
 
 
@@ -138,6 +274,7 @@ async def api_auth_verify(request: Request) -> dict[str, Any]:
     stored_pw: str = str(config.get("web_password", ""))
     pw: str = data.get("password", "")
     if stored_pw and _verify_password(pw, stored_pw):
+        _upgrade_password_hash_if_needed(pw, stored_pw)
         return {"authenticated": True, "redirect": "/"}
     return {"authenticated": False}
 
@@ -149,11 +286,20 @@ async def api_auth_session(request: Request) -> dict[str, Any]:
     pw: str = data.get("password", "")
     stored_pw: str = str(config.get("web_password", ""))
     if stored_pw and _verify_password(pw, stored_pw):
-        token: str = hashlib.sha256((stored_pw + "_afd_session").encode()).hexdigest()
-        # 通过 Response 设置 cookie — FastAPI 的 JSONResponse 不支持直接 Set-Cookie
-        # 所以返回 token 让客户端设 cookie
+        _upgrade_password_hash_if_needed(pw, stored_pw)
+        token: str = create_web_session(str(data.get("username", "admin")))
+        add_audit_log("auth.session.create", actor=str(data.get("username", "admin")), target="web", ip=_client_ip(request))
         return {"authenticated": True, "token": token}
+    add_audit_log("auth.session.failure", actor=str(data.get("username", "admin")), target="web", ip=_client_ip(request))
     return {"authenticated": False}
+
+
+@router.post("/api/auth/logout")
+async def api_auth_logout(request: Request) -> dict[str, Any]:
+    """撤销当前 session cookie。"""
+    revoked = revoke_web_session(_auth_cookie_token(request))
+    add_audit_log("auth.session.revoke", actor="admin", target="web", payload={"revoked": revoked}, ip=_client_ip(request))
+    return {"success": True, "revoked": revoked}
 
 
 @router.post("/api/auth/change-password")
@@ -169,11 +315,15 @@ async def api_auth_change_password(request: Request) -> dict[str, Any]:
         return {"error": "当前密码错误"}
     if len(new_pw) < 6:
         return {"error": "新密码至少 6 位"}
-    if new_pw == stored_pw:
+    if new_pw == cur:
         return {"error": "新密码不能与当前密码相同"}
-    config["web_password"] = new_pw
+    config["web_password"] = hash_password(new_pw)
     save_config(config)
-    return {"success": True}
+    db = get_db()
+    db.execute("UPDATE web_sessions SET revoked_at = datetime('now') WHERE revoked_at IS NULL")
+    db.commit()
+    add_audit_log("auth.password.change", actor="admin", target="web", ip=_client_ip(request))
+    return {"success": True, "clear_saved_auth": True}
 
 
 @router.post("/api/auth/api-key")
@@ -184,18 +334,22 @@ async def api_auth_api_key(request: Request) -> dict[str, Any]:
     data: dict[str, Any] = await request.json()
     action: str = data.get("action", "get")
     if action == "regenerate":
-        api_key: str = secrets.token_hex(32)
-        config["api_key"] = api_key
+        api_key: str = create_api_token("default", revoke_existing=True)
+        config["api_key"] = ""  # plaintext API keys are now DB-backed and revocable
         save_config(config)
+        add_audit_log("auth.api_key.regenerate", actor="admin", target="api", ip=_client_ip(request))
         return {"success": True, "api_key": api_key}
-    return {"api_key": str(config.get("api_key", ""))}
+    return {"api_key": ""}
 
 
 # ---- 受保护页面路由 ----
 
 
 def _protect(request: Request) -> HTMLResponse | None:
-    """检查登录，未登录返回重定向"""
+    """检查初始化和登录，未满足时返回重定向。"""
+    setup_redirect = _setup_redirect_if_needed(request)
+    if setup_redirect:
+        return setup_redirect
     pw: str = str(config.get("web_password", ""))
     if pw and not _check_auth(request):
         # 检查 sessionStorage/localStorage token 通过 header 传递
@@ -586,7 +740,7 @@ async def update_node(request: Request) -> Any:
 async def browse_directory(path: str = "/") -> Any:
     """列出指定目录下的子目录"""
     try:
-        p: Path = Path(path).resolve()
+        p: Path = safe_join(config.get("browse_root", "/"), path.lstrip("/")) if path != "/" else Path(config.get("browse_root", "/")).resolve()
         if not p.is_dir():
             return JSONResponse({"error": "not a directory", "path": str(p)}, status_code=400)
         items: list[dict[str, Any]] = []
@@ -619,9 +773,12 @@ async def create_directory(request: Request) -> Any:
     if not dir_path:
         return JSONResponse({"error": "path required"}, status_code=400)
     try:
-        p: Path = Path(dir_path).resolve()
+        p: Path = safe_join(config.get("browse_root", "/"), dir_path.lstrip("/")) if dir_path != "/" else Path(config.get("browse_root", "/")).resolve()
         p.mkdir(parents=True, exist_ok=True)
+        add_audit_log("file.mkdir", actor="admin", target=str(p), ip=_client_ip(request))
         return {"status": "created", "path": str(p)}
+    except PathSecurityError:
+        return JSONResponse({"error": "invalid path"}, status_code=400)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -630,7 +787,11 @@ async def create_directory(request: Request) -> Any:
 async def serve_local_file(task_id: str, filename: str) -> Any:
     """通过 Web 端口提供文件下载"""
     download_dir: Path = Path(config["download_dir"])
-    file_path: Path = download_dir / task_id / filename
+    try:
+        file_path: Path = _safe_download_file_path(task_id, filename)
+    except PathSecurityError:
+        logger.warning("File download rejected: task=%s file=%s", task_id, filename)
+        return JSONResponse({"error": "Invalid path"}, status_code=400)
     if not file_path.exists() or not file_path.is_file():
         logger.warning("File download 404: task=%s file=%s path=%s", task_id, filename, file_path)
         return JSONResponse({"error": "File not found"}, status_code=404)
@@ -728,7 +889,10 @@ async def retry_task(request: Request) -> Any:
 async def preview_file(task_id: str, filename: str) -> Any:
     """文件预览（文本/图片）"""
     download_dir: Path = Path(config["download_dir"])
-    file_path: Path = download_dir / task_id / filename
+    try:
+        file_path: Path = _safe_download_file_path(task_id, filename)
+    except PathSecurityError:
+        return JSONResponse({"error": "Invalid path"}, status_code=400)
     if not file_path.exists() or not file_path.is_file():
         return JSONResponse({"error": "File not found"}, status_code=404)
 
@@ -792,8 +956,11 @@ async def rename_file(request: Request) -> Any:
     if not row or not row["local_path"]:
         return JSONResponse({"error": "File not found on disk"}, status_code=404)
 
-    old_path: Path = Path(row["local_path"])
-    new_path: Path = old_path.parent / new_name
+    old_path: Path = Path(row["local_path"]).resolve()
+    try:
+        new_path: Path = safe_join(old_path.parent, new_name)
+    except PathSecurityError:
+        return JSONResponse({"error": "Invalid filename"}, status_code=400)
     if new_path.exists():
         return JSONResponse({"error": "Target filename already exists"}, status_code=409)
 
@@ -807,6 +974,7 @@ async def rename_file(request: Request) -> Any:
         (new_name, task_id),
     )
     db.commit()
+    add_audit_log("file.rename", actor="admin", target=task_id, payload={"old": str(old_path), "new": str(new_path)})
     return {"status": "renamed", "filename": new_name}
 
 

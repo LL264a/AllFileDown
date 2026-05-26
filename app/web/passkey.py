@@ -4,7 +4,6 @@ Allfiledown — WebAuthn / Passkey 通行密钥
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import uuid
@@ -32,6 +31,7 @@ from webauthn.helpers.structs import (
 
 from app.config import config
 from app.database import get_db
+from app.security import create_web_session
 
 logger = logging.getLogger("afd.passkey")
 
@@ -300,8 +300,7 @@ async def passkey_login_complete(request: Request) -> dict[str, Any]:
     )
     db.commit()
 
-    stored_pw: str = str(config.get("web_password", ""))
-    token: str = hashlib.sha256((stored_pw + "_afd_session").encode()).hexdigest()
+    token: str = create_web_session("admin")
 
     return {
         "authenticated": True,

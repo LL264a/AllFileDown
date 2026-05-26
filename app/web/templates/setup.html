@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>AFD · 首次初始化</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-page)}
+        .setup-box{width:100%;max-width:520px;padding:20px}
+        .setup-card{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:32px 28px;box-shadow:var(--shadow-lg)}
+        .setup-logo{text-align:center;margin-bottom:22px}
+        .setup-logo h1{font-size:1.5rem;font-weight:700;color:var(--text-primary)}
+        .setup-logo p{font-size:.86rem;color:var(--text-tertiary);margin-top:6px;line-height:1.6}
+        .setup-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .setup-form .full{grid-column:1/-1}
+        .field{display:flex;flex-direction:column;gap:6px}
+        .field label{font-size:.82rem;color:var(--text-secondary);font-weight:600}
+        .input{width:100%}
+        .msg{display:none;margin-top:14px;padding:10px 12px;border-radius:var(--radius-sm);font-size:.86rem}
+        .msg.error{display:block;color:var(--red);background:var(--bg-danger);border:1px solid var(--red)}
+        .msg.success{display:block;color:var(--green);background:var(--bg-success);border:1px solid var(--green)}
+        .hint{font-size:.78rem;color:var(--text-tertiary);line-height:1.5}
+        @media(max-width:640px){.setup-form{grid-template-columns:1fr}.setup-card{padding:28px 20px}}
+    </style>
+</head>
+<body>
+    <div class="setup-box">
+        <div class="setup-card">
+            <div class="setup-logo">
+                <h1>AFD 首次初始化</h1>
+                <p>配置一次后就会进入正常登录流程。</p>
+            </div>
+            <form class="setup-form" onsubmit="submitSetup(event)">
+                <div class="field">
+                    <label for="username">用户名</label>
+                    <input class="input" id="username" autocomplete="username" value="{{ default_username }}" required>
+                </div>
+                <div class="field">
+                    <label for="nodeId">节点 ID</label>
+                    <input class="input" id="nodeId" value="{{ default_node_id }}" placeholder="rr" required>
+                </div>
+                <div class="field">
+                    <label for="password">密码</label>
+                    <input class="input" id="password" type="password" autocomplete="new-password" minlength="6" required>
+                </div>
+                <div class="field">
+                    <label for="passwordConfirm">确认密码</label>
+                    <input class="input" id="passwordConfirm" type="password" autocomplete="new-password" minlength="6" required>
+                </div>
+                <div class="field full">
+                    <label for="downloadDir">下载路径</label>
+                    <input class="input" id="downloadDir" value="{{ default_download_dir }}" placeholder="/data/TrAr" required>
+                    <div class="hint">必须是绝对路径；目录不存在时会自动创建。</div>
+                </div>
+                <div class="field">
+                    <label for="nodeName">节点名称</label>
+                    <input class="input" id="nodeName" value="{{ default_node_name }}" placeholder="R.R." required>
+                </div>
+                <div class="field">
+                    <label for="publicHost">公网 IP / 域名</label>
+                    <input class="input" id="publicHost" value="{{ default_public_host }}" placeholder="8.135.77.191 或 https://afd.example.com" required>
+                </div>
+                <button class="btn btn-primary full" id="setupBtn" type="submit" style="margin-top:8px">完成初始化</button>
+            </form>
+            <div id="setupMsg" class="msg"></div>
+        </div>
+    </div>
+    <script>
+        async function submitSetup(event){
+            event.preventDefault();
+            const btn = document.getElementById('setupBtn');
+            const msg = document.getElementById('setupMsg');
+            msg.className = 'msg';
+            msg.textContent = '';
+            btn.disabled = true;
+            btn.textContent = '保存中...';
+            try {
+                const res = await fetch('/api/setup', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({
+                        username: document.getElementById('username').value.trim(),
+                        password: document.getElementById('password').value,
+                        password_confirm: document.getElementById('passwordConfirm').value,
+                        download_dir: document.getElementById('downloadDir').value.trim(),
+                        node_id: document.getElementById('nodeId').value.trim(),
+                        node_name: document.getElementById('nodeName').value.trim(),
+                        public_host: document.getElementById('publicHost').value.trim()
+                    })
+                });
+                const data = await res.json();
+                if(data.success){
+                    msg.className = 'msg success';
+                    msg.textContent = '初始化完成，正在跳转登录页...';
+                    location.href = data.redirect || '/login';
+                    return;
+                }
+                msg.className = 'msg error';
+                msg.textContent = data.error || '初始化失败';
+            } catch (e) {
+                msg.className = 'msg error';
+                msg.textContent = '请求失败：' + e.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '完成初始化';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -9,6 +9,8 @@ from typing import Any
 
 from aiohttp import web
 
+from app.security import PathSecurityError, safe_join
+
 
 def create_file_server(
     download_dir: str,
@@ -43,7 +45,10 @@ def create_file_server(
         if expected_token and token != expected_token:
             return web.Response(status=403, text="Forbidden: invalid token")
 
-        file_path: Path = Path(download_dir) / task_id / filename
+        try:
+            file_path: Path = safe_join(download_dir, task_id, filename)
+        except PathSecurityError:
+            return web.Response(status=400, text="Invalid path")
         if not file_path.exists():
             return web.Response(status=404, text="File not found")
         if not file_path.is_file():
@@ -54,7 +59,10 @@ def create_file_server(
     async def list_files(request: web.Request) -> web.Response:
         """列出任务目录下的文件"""
         task_id: str = request.match_info.get("task_id", "")
-        task_dir: Path = Path(download_dir) / task_id
+        try:
+            task_dir: Path = safe_join(download_dir, task_id)
+        except PathSecurityError:
+            return web.Response(status=400, text="Invalid path")
         if not task_dir.exists():
             return web.json_response({"files": []})
         files: list[dict[str, Any]] = []
