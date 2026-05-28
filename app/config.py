@@ -17,6 +17,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "initialized": False,  # 首次启动时进入 /setup
     "node_id": "sk",
     "node_name": "S.K. (本机)",
+    "node_type": "full",  # full / download / upload
     "host": "0.0.0.0",
     "port": 18790,
     "bind_host": None,

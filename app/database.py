@@ -29,6 +29,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     migrations = [
         ("ALTER TABLE nodes ADD COLUMN save_path TEXT DEFAULT ''", "duplicate column"),
         ("ALTER TABLE task_nodes ADD COLUMN download_speed INTEGER DEFAULT 0", "duplicate column"),
+        ("ALTER TABLE task_nodes ADD COLUMN checksum_md5 TEXT DEFAULT ''", "duplicate column"),
+        ("ALTER TABLE task_nodes ADD COLUMN checksum_sha256 TEXT DEFAULT ''", "duplicate column"),
+
+        ("ALTER TABLE tasks ADD COLUMN checksum_md5 TEXT DEFAULT ''", "duplicate column"),
+        ("ALTER TABLE tasks ADD COLUMN checksum_sha256 TEXT DEFAULT ''", "duplicate column"),
     ]
     for sql, ignore_msg in migrations:
         try:
@@ -63,6 +68,7 @@ def init_db() -> sqlite3.Connection:
             total_size INTEGER DEFAULT 0,
             downloaded_size INTEGER DEFAULT 0,
             status TEXT DEFAULT 'pending',
+            priority INTEGER DEFAULT 5,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -99,14 +105,23 @@ def init_db() -> sqlite3.Connection:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE TABLE IF NOT EXISTS audit_logs (
+        CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            action TEXT NOT NULL,
-            actor TEXT DEFAULT '',
-            target TEXT DEFAULT '',
-            payload TEXT DEFAULT '{}',
-            ip TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            task_id TEXT NOT NULL,
+            task_name TEXT DEFAULT '',
+            total_size INTEGER DEFAULT 0,
+            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            webhook_sent INTEGER DEFAULT 0,
+            push_sent INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS notification_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            webhook_url TEXT DEFAULT '',
+            webhook_enabled INTEGER DEFAULT 0,
+            push_enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS web_sessions (

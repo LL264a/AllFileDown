@@ -17,6 +17,15 @@
         .toast-float{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-md);color:var(--text-primary);font-size:.85rem;z-index:9999;box-shadow:var(--shadow-lg);animation:sheetUp .2s ease;display:none;white-space:nowrap}
         .toast-float.success{border-color:var(--green);background:var(--bg-success);color:var(--green)}
         .toast-float.error{border-color:var(--red);background:var(--bg-danger);color:var(--red)}
+
+        .task-head-actions{display:flex;align-items:center;gap:8px}
+        .check-all-label{display:flex;align-items:center;cursor:pointer;padding:2px}
+        .check-all-label input{width:16px;height:16px;cursor:pointer}
+        .task-checkbox{display:flex;align-items:center;padding:2px 4px 0 0}
+        .task-checkbox input{width:15px;height:15px;cursor:pointer}
+        .btn-outline{background:transparent;border:1px solid var(--border-color);color:var(--text-secondary);font-size:.82rem;padding:4px 10px;border-radius:var(--radius-sm);cursor:pointer;transition:.15s}
+        .btn-outline:hover{border-color:var(--red);color:var(--red)}
+        .btn-outline:disabled{opacity:.4;cursor:not-allowed;border-color:var(--border-color);color:var(--text-tertiary)}
     </style>
 </head>
 <body>
@@ -32,7 +41,7 @@
                 <a href="/"><span>📂</span><span class="nav-label">文件</span></a>
                 <a href="/downloads" class="active"><span>📥</span><span class="nav-label">下载</span></a>
                 <a href="/stations"><span>📊</span><span class="nav-label">节点</span></a>
-                <a href="/nodes"><span>⚙️</span><span class="nav-label">设置</span></a>
+                <a href="/nodes"><span>🔑</span><span class="nav-label">接入配置</span></a>
             </div>
         </div>
         <div class="topbar-right">
@@ -87,6 +96,14 @@
         <div class="task-section" id="failedSection" style="display:none">
             <div class="task-head">
                 <h2>❌ 已失败 <span class="count-badge" id="failedCount">0</span></h2>
+                <div class="task-head-actions">
+                    <label class="check-all-label" title="全选">
+                        <input type="checkbox" id="failedCheckAll" onchange="toggleAllFailed(this.checked)">
+                    </label>
+                    <button class="btn btn-sm btn-outline" onclick="clearSelectedFailed()" id="clearFailedBtn" disabled>
+                        🗑️ 清理选中
+                    </button>
+                </div>
             </div>
             <div id="failedTasks"></div>
         </div>
@@ -114,6 +131,8 @@
             const btn = document.getElementById('themeToggle');
             if (btn) btn.textContent = t === 'light' ? '☀️' : '🌙';
         })();
+
+        const LOCAL_NODE_ID = "{{ node_id }}";
 
         function progressSim() {
             const bar = document.getElementById('globalProgressFill');
@@ -145,60 +164,136 @@
             return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
         }
 
+        function statusText(status) {
+            const label = { 'active':'下载中','downloading':'下载中','paused':'已暂停','completed':'已完成','complete':'已完成','failed':'已失败','pending':'排队中','waiting':'等待中','seeding':'做种中','offline':'离线','unknown':'未知' };
+            return label[status] || status;
+        }
+
         function statusBadge(status) {
-            const map = { 'downloading':'badge-downloading','paused':'badge-paused','completed':'badge-completed','failed':'badge-failed','pending':'badge-pending','seeding':'badge-seeding' };
+            const map = { 'active':'badge-downloading','downloading':'badge-downloading','paused':'badge-paused','completed':'badge-completed','complete':'badge-completed','failed':'badge-failed','pending':'badge-pending','seeding':'badge-seeding' };
             const cls = map[status] || 'badge-pending';
-            const label = { 'downloading':'下载中','paused':'已暂停','completed':'已完成','failed':'已失败','pending':'排队中','seeding':'做种中' };
-            return '<span class="badge '+cls+'">'+(label[status]||status)+'</span>';
+            return '<span class="badge '+cls+'">'+statusText(status)+'</span>';
         }
 
-        function progressBar(pct, status) {
-            const cls = status==='failed' ? 'progress-bar-red' : (status==='paused' ? 'progress-bar-yellow' : (status==='completed'||status==='seeding' ? 'progress-bar-green' : 'progress-bar-accent'));
-            return '<div class="progress-bar-wrap"><div class="progress-bar '+cls+'" style="width:'+Math.min(pct||0,100)+'%"></div></div>';
+        function displayNodeName(n) {
+            const raw = String(n.node_name || n.node_id || '').trim();
+            const id = String(n.node_id || raw).trim().toLowerCase();
+            const names = { sk: 'S.K.', vv: 'V.V.', cc: 'C.C.', kk: 'K.K.', aa: 'A.A.', bb: 'B.B.' };
+            if (names[id]) return names[id];
+            if (/^[a-z]{2}$/.test(raw)) return raw.toUpperCase().split('').join('.') + '.';
+            return raw || '未知节点';
         }
 
-        function nodeProgHtml(nodes, filename) {
-            if (!nodes || nodes.length===0) return '';
-            let h = '<div class="node-progress">';
-            for (const n of nodes) {
-                const cls = n.online ? '' : 'offline';
-                h += '<span class="node-label ' + cls + '">' + esc(n.label || n.id) + '</span>' +
-                    '<div class="progress-bar-wrap" style="flex:1;max-width:120px"><div class="progress-bar progress-bar-accent" style="width:' + Math.min(n.progress||0,100) + '%"></div></div>' +
-                    '<span class="pct">' + (n.progress||0).toFixed(0) + '%</span>';
+        function progressBar(pct, status, threads) {
+            pct = Math.max(0, Math.min(Math.round(pct || 0), 100));
+            threads = Math.max(0, parseInt(threads || 0));
+            const cls = status==='failed' ? 'progress-bar-red' : (status==='paused' ? 'progress-bar-yellow' : (status==='completed'||status==='complete'||status==='seeding' ? 'progress-bar-green' : 'progress-bar-accent'));
+            return '<div class="progress-bar-bubble"><div class="progress-bar-wrap"><div class="progress-bar '+cls+'" style="width:'+pct+'%"></div></div></div>';
+        }
+
+        function nodeActionHtml(taskId, status) {
+            const safeId = esc(taskId || '');
+            let html = '<span class="node-action-group">';
+            if (status === 'paused') html += '<button class="node-action-btn action-resume" onclick="resumeTask(\'' + safeId + '\')" title="继续">继续</button>';
+            else if (status === 'downloading' || status === 'active') html += '<button class="node-action-btn action-pause" onclick="pauseTask(\'' + safeId + '\')" title="暂停">暂停</button>';
+            else if (status === 'pending' || status === 'waiting') html += '<button class="node-action-btn action-cancel danger" onclick="cancelTask(\'' + safeId + '\')" title="取消">取消</button>';
+            html += '<button class="node-action-btn action-delete danger" onclick="deleteTask(\'' + safeId + '\')" title="删除文件和节点记录">删除</button>';
+            html += '</span>';
+            return html;
+        }
+
+        function nodeProgHtml(nodes, taskStatus, totalSize, taskId) {
+            if (!nodes || nodes.length===0) {
+                if (taskStatus === 'downloading' || taskStatus === 'pending' || taskStatus === 'paused') {
+                    return '<div class="node-progress" style="padding-top:6px"><div class="node-progress-card"><div class="node-progress-name">等待节点</div><div class="node-progress-chips"><span class="node-chip node-chip-speed">速度 0 B/s</span><span class="node-chip node-chip-done">完成 0%</span>' + nodeActionHtml(taskId, taskStatus) + '</div><div class="node-progress-line">' + progressBar(0, taskStatus, 0) + '<span class="node-threads">线程 0</span>' + statusBadge(taskStatus) + '</div></div></div>';
+                }
+                return '';
+            }
+            const ordered = [...nodes].sort((a,b) => {
+                const al = a.node_id === LOCAL_NODE_ID ? 0 : 1;
+                const bl = b.node_id === LOCAL_NODE_ID ? 0 : 1;
+                return al - bl || String(a.node_id || '').localeCompare(String(b.node_id || ''));
+            });
+            let h = '<div class="node-progress" style="padding-top:6px">';
+            for (const n of ordered) {
+                const pct = Math.max(0, Math.min(Math.round((n.progress || 0) * 100), 100));
+                const speed = n.download_speed ? formatSize(n.download_speed)+'/s' : '0 B/s';
+                const status = n.status || 'unknown';
+                const doneBytes = totalSize ? totalSize * (n.progress || 0) : 0;
+                const done = totalSize ? formatSize(doneBytes) : '-';
+                const size = totalSize ? formatSize(totalSize) : '-';
+                const rawThreads = n.connections || 0;
+                const threads = (status === 'completed' || status === 'complete' || status === 'seeding' || pct >= 100) ? 0 : rawThreads;
+                h += '<div class="node-progress-card">' +
+                    '<div class="node-progress-name">' + esc(displayNodeName(n)) + '</div>' +
+                    '<div class="node-progress-chips">' +
+                    '<span class="node-chip node-chip-speed">速度 ' + speed + '</span>' +
+                    '<span class="node-chip node-chip-done">完成 ' + pct + '%</span>' +
+                    nodeActionHtml(taskId, status) +
+                    '</div>' +
+                    '<div class="node-progress-line">' +
+                    (totalSize ? '<span class="node-size">' + done + ' / ' + size + '</span>' : '') +
+                    progressBar(pct, status, threads) +
+                    (threads ? '<span class="node-threads">线程 ' + threads + '</span>' : '') +
+                    statusBadge(status) +
+                    '</div></div>';
             }
             h += '</div>';
             return h;
         }
 
+        function displayFilename(t) {
+            if (t.filename) return t.filename;
+            const url = t.url || '';
+            try {
+                const clean = url.split('?')[0].split('#')[0];
+                const last = clean.substring(clean.lastIndexOf('/') + 1) || url;
+                return decodeURIComponent(last);
+            } catch(e) {
+                return url || '未知';
+            }
+        }
+
+        function effectiveTaskStatus(t) {
+            const nodes = t.nodes || [];
+            const statuses = nodes.map(n => n.status || '').filter(Boolean);
+            if (statuses.some(s => s.includes('downloading'))) return 'downloading';
+            if (statuses.some(s => s.includes('paused'))) return 'paused';
+            if (statuses.some(s => s.includes('pending') || s.includes('waiting'))) return 'pending';
+            if (statuses.some(s => s.includes('failed') || s.includes('error'))) return 'failed';
+            if (statuses.length && statuses.every(s => s.includes('seeding') || s.includes('completed') || s.includes('complete'))) return 'seeding';
+            return t.status || 'pending';
+        }
+
         function renderTask(t) {
-            const pct = t.progress || 0;
-            const speed = t.speed ? formatSize(t.speed) + '/s' : '';
-            const size = t.size ? formatSize(t.size) : '';
-            const done = t.downloaded ? formatSize(t.downloaded) : '';
-            return '<div class="task-item" data-id="' + esc(t.task_id) + '">' +
+            const nodes = t.nodes || [];
+            const effectiveStatus = effectiveTaskStatus(t);
+            const totalSize = t.total_size || 0;
+            const doneSize = t.downloaded_size || 0;
+            let totalPct = totalSize > 0 ? Math.round(doneSize / totalSize * 100) : 0;
+            if ((effectiveStatus === 'completed' || effectiveStatus === 'seeding') && totalPct === 0) totalPct = 100;
+            if (totalPct === 0 && nodes.length > 0) {
+                totalPct = Math.round(Math.max(...nodes.map(n => n.progress || 0)) * 100);
+            }
+            const totalSpeed = nodes.length > 0 ? formatSize(nodes.reduce((s,n) => s + (n.download_speed||0), 0)) + '/s' : '';
+            const sizeStr = formatSize(totalSize);
+            const doneStr = formatSize(doneSize);
+            const showProg = true;
+            return '<div class="task-item" data-id="' + esc(t.id) + '">' +
                 '<div class="task-header">' +
                 '<div class="task-info">' +
-                '<div class="name">' + esc(t.filename || t.url || '未知') + '</div>' +
-                '<div class="url">' + esc(t.url || '') + '</div>' +
+                '<div class="name">' + esc(displayFilename(t)) + '</div>' +
+                '<div class="url" style="font-size:.72rem;color:var(--text-tertiary);opacity:.75">' + esc(t.url || '') + '</div>' +
                 '</div>' +
                 '<div class="task-status-col">' +
                 '<div class="task-actions">' +
-                (t.status === 'paused' ? '<button class="task-action-btn resume" onclick="resumeTask(\''+esc(t.task_id)+'\')" title="恢复">▶</button>' : '') +
-                (t.status === 'downloading' ? '<button class="task-action-btn pause" onclick="pauseTask(\''+esc(t.task_id)+'\')" title="暂停">⏸</button>' : '') +
-                (t.status === 'pending' ? '<button class="task-action-btn cancel" onclick="cancelTask(\''+esc(t.task_id)+'\')" title="取消">✕</button>' : '') +
-                (t.status === 'failed' ? '<button class="task-action-btn retry" onclick="retryTask(\''+esc(t.task_id)+'\')" title="重试">↻</button>' : '') +
-                (t.status === 'completed' || t.status === 'seeding' ? '<button class="task-action-btn delete" onclick="deleteTask(\''+esc(t.task_id)+'\')" title="删除">🗑️</button>' : '') +
-                '</div>' +
-                statusBadge(t.status) +
+                (effectiveStatus === 'failed' ? '<label class="task-checkbox"><input type="checkbox" class="failed-checkbox" value="'+esc(t.id)+'" onchange="updateClearBtn()"></label>' : '') +
+                (effectiveStatus === 'failed' ? '<button class="task-action-btn retry" onclick="retryTask(\''+esc(t.id)+'\')" title="重试">↻</button>' : '') +
+                (effectiveStatus === 'completed' || effectiveStatus === 'seeding' ? '<button class="task-action-btn delete" onclick="deleteTask(\''+esc(t.id)+'\')" title="删除">🗑️</button>' : '') +
                 '</div>' +
                 '</div>' +
-                (t.nodes && t.nodes.length > 0 ? nodeProgHtml(t.nodes, t.filename) : '') +
-                '<div class="task-meta-bar">' +
-                (pct > 0 ? progressBar(pct, t.status) : '') +
-                '<span class="meta-chip">' + (done ? done + ' / ' : '') + size + '</span>' +
-                (speed ? '<span class="meta-chip">⬆ ' + speed + '</span>' : '') +
-                (pct > 0 ? '<span class="meta-chip">' + Math.round(pct) + '%</span>' : '') +
                 '</div>' +
+                nodeProgHtml(nodes, effectiveStatus, totalSize, t.id) +
                 '</div>';
         }
 
@@ -221,10 +316,10 @@
                 const data = await res.json();
                 const tasks = data.tasks || [];
 
-                const active = tasks.filter(t => t.status === 'downloading' || t.status === 'pending');
-                const paused = tasks.filter(t => t.status === 'paused');
-                const completed = tasks.filter(t => t.status === 'completed' || t.status === 'seeding');
-                const failed = tasks.filter(t => t.status === 'failed');
+                const active = tasks.filter(t => effectiveTaskStatus(t) === 'downloading' || effectiveTaskStatus(t) === 'pending');
+                const paused = tasks.filter(t => effectiveTaskStatus(t) === 'paused');
+                const completed = tasks.filter(t => effectiveTaskStatus(t) === 'completed' || effectiveTaskStatus(t) === 'seeding');
+                const failed = tasks.filter(t => effectiveTaskStatus(t) === 'failed');
 
                 renderTasks(active, 'activeSection', 'activeTasks', 'activeCount');
                 renderTasks(paused, 'pausedSection', 'pausedTasks', 'pausedCount');
@@ -304,8 +399,46 @@
         }
 
         async function deleteTask(id) {
-            try { await fetch('/api/task/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task_id:id}) }); fetchTasks(); }
+            if (!confirm('确定删除这个任务、已下载文件和节点记录？删除后不会再展示这些节点。')) return;
+            progressSim();
+            try {
+                const res = await fetch('/api/task/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task_id:id}) });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.error) throw new Error(data.error || '删除失败');
+                toast('✅ 已删除任务和文件','success');
+                fetchTasks();
+            }
             catch(err) { toast('❌ '+err.message,'error'); }
+        }
+
+        function toggleAllFailed(checked) {
+            document.querySelectorAll('.failed-checkbox').forEach(cb => cb.checked = checked);
+            updateClearBtn();
+        }
+
+        function updateClearBtn() {
+            const btn = document.getElementById('clearFailedBtn');
+            btn.disabled = document.querySelectorAll('.failed-checkbox:checked').length === 0;
+        }
+
+        async function clearSelectedFailed() {
+            const checked = document.querySelectorAll('.failed-checkbox:checked');
+            if (checked.length === 0) { toast('请先勾选要清理的任务','error'); return; }
+            if (!confirm('确定要清理选中的 ' + checked.length + ' 个失败任务？')) return;
+            const ids = Array.from(checked).map(cb => cb.value);
+            progressSim();
+            for (const id of ids) {
+                try {
+                    await fetch('/api/task/delete', {
+                        method:'POST',
+                        headers:{'Content-Type':'application/json'},
+                        body: JSON.stringify({task_id: id})
+                    });
+                } catch(err) { console.error('clear failed:', id, err); }
+            }
+            toast('✅ 已清理 ' + ids.length + ' 个失败任务','success');
+            document.getElementById('failedCheckAll').checked = false;
+            fetchTasks();
         }
 
         document.addEventListener('DOMContentLoaded', () => {

@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>AFD · 系统设置</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body{background:var(--bg-page);min-height:100vh}
+        .settings-box{width:100%;max-width:720px;padding:20px;margin:0 auto}
+        .settings-card{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:28px;margin-bottom:16px}
+        .settings-card h2{font-size:1.1rem;font-weight:700;color:var(--text-primary);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+        .settings-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .settings-form .full{grid-column:1/-1}
+        .field{display:flex;flex-direction:column;gap:6px}
+        .field label{font-size:.82rem;color:var(--text-secondary);font-weight:600}
+        .input{width:100%}
+        .hint{font-size:.78rem;color:var(--text-tertiary);line-height:1.5}
+        .msg{display:none;margin-top:14px;padding:10px 12px;border-radius:var(--radius-sm);font-size:.86rem}
+        .msg.error{display:block;color:var(--red);background:var(--bg-danger);border:1px solid var(--red)}
+        .msg.success{display:block;color:var(--green);background:var(--bg-success);border:1px solid var(--green)}
+        .readonly{background:var(--bg-page);cursor:not-allowed}
+        .btn-row{display:flex;gap:10px;margin-top:16px}
+        @media(max-width:640px){.settings-form{grid-template-columns:1fr}.settings-card{padding:22px 16px}}
+    </style>
+</head>
+<body>
+    <div class="settings-box">
+        <div class="settings-card">
+            <h2>⚙️ 节点信息</h2>
+            <form class="settings-form" onsubmit="saveNodeInfo(event)">
+                <div class="field">
+                    <label>节点 ID</label>
+                    <input class="input readonly" id="nodeId" readonly>
+                </div>
+                <div class="field">
+                    <label>节点名称</label>
+                    <input class="input" id="nodeName" required>
+                </div>
+                <div class="field">
+                    <label>节点角色</label>
+                    <select class="input" id="nodeType">
+                        <option value="full">Full Node（完整功能）</option>
+                        <option value="download">Download-Only（仅下载）</option>
+                        <option value="upload">Upload-Only（仅上传/仓库）</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>公网地址</label>
+                    <input class="input" id="publicHost" placeholder="IP 或域名">
+                </div>
+                <div class="field full">
+                    <label>下载路径</label>
+                    <input class="input" id="downloadDir" required>
+                    <div class="hint">必须是绝对路径。修改后新任务生效，已有任务不受影响。</div>
+                </div>
+                <div class="btn-row full">
+                    <button class="btn btn-primary" type="submit">保存节点设置</button>
+                </div>
+                <div id="nodeMsg" class="msg"></div>
+            </form>
+        </div>
+
+        <div class="settings-card">
+            <h2>🔐 安全设置</h2>
+            <form class="settings-form" onsubmit="changePassword(event)">
+                <div class="field">
+                    <label>当前密码</label>
+                    <input class="input" id="currentPassword" type="password" required>
+                </div>
+                <div class="field">
+                    <label>新密码</label>
+                    <input class="input" id="newPassword" type="password" minlength="6" required>
+                </div>
+                <div class="field">
+                    <label>确认新密码</label>
+                    <input class="input" id="confirmPassword" type="password" minlength="6" required>
+                </div>
+                <div class="btn-row full">
+                    <button class="btn btn-primary" type="submit">修改密码</button>
+                </div>
+                <div id="passwordMsg" class="msg"></div>
+            </form>
+        </div>
+
+        <div class="settings-card">
+            <h2>🔑 API 密钥</h2>
+            <div class="settings-form">
+                <div class="field full">
+                    <label>当前 API Key</label>
+                    <input class="input readonly" id="apiKey" readonly placeholder="点击重新生成获取">
+                </div>
+                <div class="btn-row full">
+                    <button class="btn btn-secondary" onclick="getApiKey()">查看 Key</button>
+                    <button class="btn btn-warning" onclick="regenerateApiKey()">重新生成</button>
+                </div>
+                <div id="apiKeyMsg" class="msg"></div>
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <h2>📡 aria2 配置</h2>
+            <form class="settings-form" onsubmit="saveAria2Config(event)">
+                <div class="field">
+                    <label>主机</label>
+                    <input class="input" id="aria2Host" placeholder="127.0.0.1">
+                </div>
+                <div class="field">
+                    <label>端口</label>
+                    <input class="input" id="aria2Port" type="number" placeholder="6800">
+                </div>
+                <div class="field">
+                    <label>Secret</label>
+                    <input class="input" id="aria2Secret" type="password" placeholder="留空表示无认证">
+                </div>
+                <div class="field">
+                    <label>TLS</label>
+                    <select class="input" id="aria2Tls">
+                        <option value="false">关闭</option>
+                        <option value="true">启用</option>
+                    </select>
+                </div>
+                <div class="btn-row full">
+                    <button class="btn btn-primary" type="submit">保存 aria2 配置</button>
+                </div>
+                <div id="aria2Msg" class="msg"></div>
+            </form>
+        </div>
+
+        <div class="settings-card">
+            <h2>🌐 网络配置</h2>
+            <form class="settings-form" onsubmit="saveNetworkConfig(event)">
+                <div class="field">
+                    <label>绑定地址</label>
+                    <input class="input" id="bindHost" placeholder="0.0.0.0">
+                </div>
+                <div class="field">
+                    <label>端口</label>
+                    <input class="input" id="webPort" type="number" placeholder="18790">
+                </div>
+                <div class="field">
+                    <label>文件服务端口</label>
+                    <input class="input" id="fileServerPort" type="number" placeholder="18791">
+                </div>
+                <div class="btn-row full">
+                    <button class="btn btn-primary" type="submit">保存网络配置</button>
+                    <button class="btn btn-danger" onclick="restartService()">重启服务</button>
+                </div>
+                <div id="networkMsg" class="msg"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 加载当前配置
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const data = await res.json();
+                if (data.config) {
+                    const c = data.config;
+                    document.getElementById('nodeId').value = c.node_id || '';
+                    document.getElementById('nodeName').value = c.node_name || '';
+                    document.getElementById('nodeType').value = c.node_type || 'full';
+                    document.getElementById('publicHost').value = c.peer_host || c.host || '';
+                    document.getElementById('downloadDir').value = c.download_dir || '';
+                    document.getElementById('aria2Host').value = (c.aria2 && c.aria2.host) || '';
+                    document.getElementById('aria2Port').value = (c.aria2 && c.aria2.port) || '';
+                    document.getElementById('aria2Secret').value = (c.aria2 && c.aria2.secret) || '';
+                    document.getElementById('aria2Tls').value = (c.aria2 && c.aria2.tls) ? 'true' : 'false';
+                    document.getElementById('bindHost').value = c.bind_host || c.host || '';
+                    document.getElementById('webPort').value = c.port || '';
+                    document.getElementById('fileServerPort').value = c.file_server_port || '';
+                }
+            } catch (err) {
+                console.error('loadSettings:', err);
+            }
+        }
+
+        async function saveNodeInfo(event) {
+            event.preventDefault();
+            const msg = document.getElementById('nodeMsg');
+            msg.className = 'msg';
+            try {
+                const res = await fetch('/api/settings/node', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        node_name: document.getElementById('nodeName').value.trim(),
+                        node_type: document.getElementById('nodeType').value,
+                        public_host: document.getElementById('publicHost').value.trim(),
+                        download_dir: document.getElementById('downloadDir').value.trim(),
+                    })
+                });
+                const data = await res.json();
+                msg.className = data.success ? 'msg success' : 'msg error';
+                msg.textContent = data.success ? '节点设置已保存' : (data.error || '保存失败');
+            } catch (err) {
+                msg.className = 'msg error';
+                msg.textContent = '请求失败: ' + err.message;
+            }
+        }
+
+        async function changePassword(event) {
+            event.preventDefault();
+            const msg = document.getElementById('passwordMsg');
+            msg.className = 'msg';
+            const newPw = document.getElementById('newPassword').value;
+            const confirmPw = document.getElementById('confirmPassword').value;
+            if (newPw !== confirmPw) {
+                msg.className = 'msg error';
+                msg.textContent = '两次密码不一致';
+                return;
+            }
+            try {
+                const res = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        current_password: document.getElementById('currentPassword').value,
+                        new_password: newPw,
+                    })
+                });
+                const data = await res.json();
+                msg.className = data.success ? 'msg success' : 'msg error';
+                msg.textContent = data.success ? '密码已修改，请重新登录' : (data.error || '修改失败');
+                if (data.success) {
+                    document.getElementById('currentPassword').value = '';
+                    document.getElementById('newPassword').value = '';
+                    document.getElementById('confirmPassword').value = '';
+                }
+            } catch (err) {
+                msg.className = 'msg error';
+                msg.textContent = '请求失败: ' + err.message;
+            }
+        }
+
+        async function getApiKey() {
+            const msg = document.getElementById('apiKeyMsg');
+            msg.className = 'msg';
+            try {
+                const res = await fetch('/api/auth/api-key', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'get'})
+                });
+                const data = await res.json();
+                if (data.api_key) {
+                    document.getElementById('apiKey').value = data.api_key;
+                    msg.className = 'msg success';
+                    msg.textContent = 'API Key 已显示';
+                } else {
+                    msg.className = 'msg error';
+                    msg.textContent = '未找到 API Key';
+                }
+            } catch (err) {
+                msg.className = 'msg error';
+                msg.textContent = '请求失败: ' + err.message;
+            }
+        }
+
+        async function regenerateApiKey() {
+            if (!confirm('确定重新生成 API Key？旧 Key 将立即失效。')) return;
+            const msg = document.getElementById('apiKeyMsg');
+            msg.className = 'msg';
+            try {
+                const res = await fetch('/api/auth/api-key', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'regenerate'})
+                });
+                const data = await res.json();
+                if (data.success && data.api_key) {
+                    document.getElementById('apiKey').value = data.api_key;
+                    msg.className = 'msg success';
+                    msg.textContent = 'API Key 已重新生成';
+                } else {
+                    msg.className = 'msg error';
+                    msg.textContent = data.error || '生成失败';
+                }
+            } catch (err) {
+                msg.className = 'msg error';
+                msg.textContent = '请求失败: ' + err.message;
+            }
+        }
+
+        async function saveAria2Config(event) {
+            event.preventDefault();
+            const msg = document.getElementById('aria2Msg');
+            msg.className = 'msg';
+            try {
+                const res = await fetch('/api/settings/aria2', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        host: document.getElementById('aria2Host').value.trim(),
+                        port: parseInt(document.getElementById('aria2Port').value),
+                        secret: document.getElementById('aria2Secret').value,
+                        tls: document.getElementById('aria2Tls').value === 'true',
+                    })
+                });
+                const data = await res.json();
+                msg.className = data.success ? 'msg success' : 'msg error';
+                msg.textContent = data.success ? 'aria2 配置已保存' : (data.error || '保存失败');
+            } catch (err) {
+                msg.className = 'msg error';
+                msg.textContent = '请求失败: ' + err.message;
+            }
+        }
+
+        async function saveNetworkConfig(event) {
+            event.preventDefault();
+            const msg = document.getElementById('networkMsg');
+            msg.className = 'msg';
+            try {
+                const res = await fetch('/api/settings/network', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        bind_host: document.getElementById('bindHost').value.trim(),
+                        port: parseInt(document.getElementById('webPort').value),
+                        file_server_port: parseInt(document.getElementById('fileServerPort').value),
+                    })
+                });
+                const data = await res.json();
+                msg.className = data.success ? 'msg success' : 'msg error';
+                msg.textContent = data.success ? '网络配置已保存，重启后生效' : (data.error || '保存失败');
+            } catch (err) {
+                msg.className = 'msg error';
+                msg.textContent = '请求失败: ' + err.message;
+            }
+        }
+
+        async function restartService() {
+            if (!confirm('确定重启服务？当前下载任务会中断。')) return;
+            const msg = document.getElementById('networkMsg');
+            msg.className = 'msg';
+            try {
+                const res = await fetch('/api/settings/restart', {method: 'POST'});
+                const data = await res.json();
+                msg.className = data.success ? 'msg success' : 'msg error';
+                msg.textContent = data.success ? '服务正在重启...' : (data.error || '重启失败');
+            } catch (err) {
+                msg.className = 'msg error';
+                msg.textContent = '请求失败: ' + err.message;
+            }
+        }
+
+        // 页面加载时获取配置
+        loadSettings();
+    </script>
+</body>
+</html>

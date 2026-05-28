@@ -19,6 +19,13 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.agent.role import (
+    can_download,
+    can_manage_nodes,
+    can_serve_web_ui,
+    get_local_node_type,
+    is_full_node,
+)
 from app.config import config, save_config
 from app.database import get_db
 from app.security import (
@@ -347,6 +354,24 @@ async def api_auth_api_key(request: Request) -> dict[str, Any]:
 
 def _protect(request: Request) -> HTMLResponse | None:
     """检查初始化和登录，未满足时返回重定向。"""
+    # 非 Full 节点不提供 Web UI
+    if not can_serve_web_ui():
+        return HTMLResponse(
+            content=f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>Allfiledown — {config["node_id"]}</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:600px;margin:80px auto;padding:20px">
+    <h1>⚙️ {esc(config["node_name"])}</h1>
+    <p>节点 ID: <code>{esc(config["node_id"])}</code></p>
+    <p>角色: <strong>{esc(get_local_node_type())}</strong></p>
+    <p>此节点不提供 Web 管理界面。</p>
+    <p>请通过 Full Node 的 Web UI 管理集群。</p>
+    <hr>
+    <p style="color:#666;font-size:0.85rem">Allfiledown v0.1.0</p>
+</body>
+</html>""",
+            status_code=403,
+        )
     setup_redirect = _setup_redirect_if_needed(request)
     if setup_redirect:
         return setup_redirect
@@ -462,9 +487,17 @@ async def files_page(request: Request) -> HTMLResponse:
 @router.post("/api/task/create")
 async def create_task(request: Request) -> JSONResponse:
     """创建下载任务"""
+    # Upload-Only 节点不接受新下载任务
+    if not can_download():
+        return JSONResponse(
+            {"error": f"Node {config['node_id']} is {get_local_node_type()}, cannot accept download tasks"},
+            status_code=403,
+        )
+    
     data: dict[str, Any] = await request.json()
     url: str = data.get("url", "")
     filename: str | None = data.get("filename")
+    priority: int = int(data.get("priority", 5))
 
     if not url:
         logger.warning("Task create failed: no URL provided, data=%s", data)
@@ -475,8 +508,8 @@ async def create_task(request: Request) -> JSONResponse:
     if orchestrator is None:
         return JSONResponse({"error": "Orchestrator not available"}, status_code=503)
 
-    logger.info("Creating task: url=%s... filename=%s", url[:80], filename)
-    task_id: str = await orchestrator.create_task(url, filename)
+    logger.info("Creating task: url=%s... filename=%s priority=%d", url[:80], filename, priority)
+    task_id: str = await orchestrator.create_task(url, filename, priority)
     logger.info("Task created: %s", task_id)
     return JSONResponse({"task_id": task_id, "status": "created"})
 
@@ -566,6 +599,10 @@ async def task_nodes_overview(task_id: str) -> Any:
 @router.post("/api/node/add")
 async def add_node(request: Request) -> Any:
     """添加新节点"""
+    # 只有 Full Node 可以管理节点
+    if not can_manage_nodes():
+        return JSONResponse({"error": "Only full nodes can manage cluster nodes"}, status_code=403)
+    
     data: dict[str, Any] = await request.json()
     node_id: str = data.get("node_id", "")
     name: str = data.get("name", "")
@@ -607,6 +644,10 @@ async def add_node(request: Request) -> Any:
 @router.post("/api/node/remove")
 async def remove_node(request: Request) -> Any:
     """移除节点"""
+    # 只有 Full Node 可以管理节点
+    if not can_manage_nodes():
+        return JSONResponse({"error": "Only full nodes can manage cluster nodes"}, status_code=403)
+    
     data: dict[str, Any] = await request.json()
     node_id: str = data.get("node_id", "")
     if not node_id:
@@ -703,6 +744,10 @@ async def list_files() -> dict[str, Any]:
 @router.post("/api/node/update")
 async def update_node(request: Request) -> Any:
     """更新节点信息"""
+    # 只有 Full Node 可以管理节点
+    if not can_manage_nodes():
+        return JSONResponse({"error": "Only full nodes can manage cluster nodes"}, status_code=403)
+    
     data: dict[str, Any] = await request.json()
     node_id: str = data.get("node_id", "")
     if not node_id:
@@ -826,6 +871,8 @@ async def delete_task(request: Request) -> Any:
     if orchestrator is None:
         return JSONResponse({"error": "Orchestrator not available"}, status_code=503)
     result: dict[str, Any] = await orchestrator.delete_task(task_id)
+    if result.get("status") == "not_found":
+        return JSONResponse({"error": "Task not found", **result}, status_code=404)
     return result
 
 
@@ -1166,9 +1213,126 @@ async def get_stations() -> dict[str, Any]:
     return {"stations": stations, "count": len(stations)}
 
 
-@router.get("/api/nodes")
-async def list_nodes() -> dict[str, Any]:
-    """列出所有节点"""
-    db = get_db()
-    rows = db.execute("SELECT * FROM nodes ORDER BY name").fetchall()
-    return {"nodes": [dict(r) for r in rows]}
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request) -> HTMLResponse:
+    """系统设置页面"""
+    r = _protect(request)
+    if r:
+        return r
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {
+            "node_id": str(config["node_id"]),
+            "node_name": str(config["node_name"]),
+        },
+    )
+
+
+@router.get("/api/settings")
+async def get_settings() -> dict[str, Any]:
+    """获取当前配置（脱敏）"""
+    safe_config = dict(config)
+    # 脱敏敏感字段
+    if "web_password" in safe_config:
+        safe_config["web_password"] = "***"
+    if "aria2" in safe_config and isinstance(safe_config["aria2"], dict):
+        safe_config["aria2"] = {**safe_config["aria2"], "secret": "***"}
+    if "auth_token" in safe_config:
+        safe_config["auth_token"] = "***"
+    return {"config": safe_config}
+
+
+@router.post("/api/settings/node")
+async def save_node_settings(request: Request) -> dict[str, Any]:
+    """保存节点设置"""
+    if not _check_auth(request):
+        return {"success": False, "error": "未登录"}
+    
+    data: dict[str, Any] = await request.json()
+    
+    # 更新配置
+    if "node_name" in data:
+        config["node_name"] = data["node_name"].strip()
+    if "node_type" in data:
+        nt = data["node_type"].lower()
+        if nt in ("full", "download", "upload"):
+            config["node_type"] = nt
+    if "public_host" in data:
+        host = data["public_host"].strip()
+        config["peer_host"] = host
+        config["host"] = host
+    if "download_dir" in data:
+        download_dir = Path(data["download_dir"]).expanduser()
+        if download_dir.is_absolute():
+            download_dir.mkdir(parents=True, exist_ok=True)
+            config["download_dir"] = str(download_dir)
+        else:
+            return {"success": False, "error": "下载路径必须是绝对路径"}
+    
+    save_config(config)
+    add_audit_log("settings.node", actor="admin", target="config", payload={"changed": list(data.keys())})
+    return {"success": True}
+
+
+@router.post("/api/settings/aria2")
+async def save_aria2_settings(request: Request) -> dict[str, Any]:
+    """保存 aria2 配置"""
+    if not _check_auth(request):
+        return {"success": False, "error": "未登录"}
+    
+    data: dict[str, Any] = await request.json()
+    aria2 = config.get("aria2", {})
+    
+    if "host" in data:
+        aria2["host"] = data["host"].strip()
+    if "port" in data:
+        aria2["port"] = int(data["port"])
+    if "secret" in data:
+        aria2["secret"] = data["secret"]
+    if "tls" in data:
+        aria2["tls"] = bool(data["tls"])
+    
+    config["aria2"] = aria2
+    save_config(config)
+    add_audit_log("settings.aria2", actor="admin", target="config")
+    return {"success": True}
+
+
+@router.post("/api/settings/network")
+async def save_network_settings(request: Request) -> dict[str, Any]:
+    """保存网络配置"""
+    if not _check_auth(request):
+        return {"success": False, "error": "未登录"}
+    
+    data: dict[str, Any] = await request.json()
+    
+    if "bind_host" in data:
+        config["bind_host"] = data["bind_host"].strip() or None
+    if "port" in data:
+        config["port"] = int(data["port"])
+    if "file_server_port" in data:
+        config["file_server_port"] = int(data["file_server_port"])
+    
+    save_config(config)
+    add_audit_log("settings.network", actor="admin", target="config")
+    return {"success": True, "restart_required": True}
+
+
+@router.post("/api/settings/restart")
+async def restart_service(request: Request) -> dict[str, Any]:
+    """重启服务"""
+    if not _check_auth(request):
+        return {"success": False, "error": "未登录"}
+    
+    add_audit_log("settings.restart", actor="admin", target="service")
+    
+    # 异步重启，先返回响应
+    async def _do_restart():
+        await asyncio.sleep(1)
+        import os
+        import sys
+        os.execv(sys.executable, [sys.executable, "-m", "app"])
+    
+    asyncio.create_task(_do_restart())
+    return {"success": True, "message": "服务正在重启..."}

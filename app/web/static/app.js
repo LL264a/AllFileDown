@@ -30,7 +30,7 @@
                     const res = await fetch('/api/task/create', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url, filename: filename || null })
+                        body: JSON.stringify({ url, filename: filename || null, priority: parseInt(document.getElementById('priority').value) || 5 })
                     });
                     const data = await res.json();
                     if (data.task_id) {
@@ -73,7 +73,25 @@
             return;
         }
 
-        container.innerHTML = tasks.map(task => {
+        // 批量操作栏
+        let batchBar = '';
+        const hasSelectable = tasks.some(t => !['completed','all_completed','seeding'].includes(t.status));
+        if (hasSelectable) {
+            batchBar = `
+                <div class="batch-bar" style="display:flex;gap:8px;align-items:center;padding:8px 12px;margin-bottom:12px;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-sm)">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem">
+                        <input type="checkbox" id="batchSelectAll" onchange="toggleSelectAll()">
+                        <span>全选</span>
+                    </label>
+                    <span id="batchCount" style="font-size:0.8rem;color:var(--text-tertiary);margin-left:auto">已选 0 项</span>
+                    <button class="btn btn-sm" onclick="batchPause()" title="暂停选中">⏸️</button>
+                    <button class="btn btn-sm" onclick="batchResume()" title="继续选中">▶️</button>
+                    <button class="btn btn-sm btn-danger" onclick="batchDelete()" title="删除选中">🗑️</button>
+                </div>
+            `;
+        }
+
+        const tasksHtml = tasks.map(task => {
             const statusMap = {downloading:'下载中',paused:'已暂停',completed:'已完成',failed:'失败',pending:'等待中',seeding:'做种',cancelled:'已取消',all_completed:'全部完成'};
             const st = statusMap[task.status] || task.status;
             const badgeClass = ['all_completed','completed'].includes(task.status) ? 'badge-completed'
@@ -111,29 +129,36 @@
             const isFailed = task.status === 'failed';
             const isCancelled = task.status === 'cancelled';
             const isFinished = ['completed','all_completed','seeding'].includes(task.status);
+            const canSelect = !isFinished;
+
+            const priorityHtml = task.priority ? `<span class="meta-chip" title="优先级 ${task.priority}">⚡ ${task.priority}</span>` : '';
 
             let actionBtns = '';
             if (isPaused) {
-                actionBtns += `<button class="task-action-btn resume" onclick="resumeTask('${attr(task.id)}')" title="继续下载">▶️</button>`;
+                actionBtns += `<button class="task-action-btn resume" onclick="event.stopPropagation();resumeTask('${attr(task.id)}')" title="继续下载">▶️</button>`;
             }
             if (isDownloading) {
-                actionBtns += `<button class="task-action-btn pause" onclick="pauseTask('${attr(task.id)}')" title="暂停">⏸️</button>`;
-                actionBtns += `<button class="task-action-btn cancel" onclick="cancelTask('${attr(task.id)}')" title="取消">⏹</button>`;
+                actionBtns += `<button class="task-action-btn pause" onclick="event.stopPropagation();pauseTask('${attr(task.id)}')" title="暂停">⏸️</button>`;
+                actionBtns += `<button class="task-action-btn cancel" onclick="event.stopPropagation();cancelTask('${attr(task.id)}')" title="取消">⏹</button>`;
             }
             if (isFailed || isCancelled) {
-                actionBtns += `<button class="task-action-btn retry" onclick="retryTask('${attr(task.id)}')" title="重新下载">🔄</button>`;
+                actionBtns += `<button class="task-action-btn retry" onclick="event.stopPropagation();retryTask('${attr(task.id)}')" title="重新下载">🔄</button>`;
             }
             if (!isDownloading) {
-                actionBtns += `<button class="task-action-btn delete" onclick="deleteTask('${attr(task.id)}')" title="删除">🗑️</button>`;
+                actionBtns += `<button class="task-action-btn delete" onclick="event.stopPropagation();deleteTask('${attr(task.id)}')" title="删除">🗑️</button>`;
             }
+
+            const selectCheckbox = canSelect ? `<input type="checkbox" class="batch-check" data-task-id="${attr(task.id)}" onchange="updateBatchCount()" style="margin-right:8px">` : '<span style="width:20px;display:inline-block"></span>';
 
             return `
                 <div class="task-item" id="task-${attr(task.id)}" onclick="showTaskDetail('${attr(task.id)}')" style="cursor:pointer">
                     <div class="task-header">
-                        <div class="task-info">
+                        ${selectCheckbox}
+                        <div class="task-info" style="flex:1">
                             <div class="name">${esc(filename)} <span style="font-size:0.7rem;color:var(--text-tertiary)">${task.id.slice(0,8)}</span></div>
                             <div class="url">${esc(task.url)}</div>
                             <div class="task-meta-bar">
+                                ${priorityHtml}
                                 ${task.total_size ? `<span class="meta-chip">📦 ${fmtSize(task.total_size)}</span>` : ''}
                                 ${isDownloading || isPaused ? `<span class="meta-chip detail-btn" onclick="event.stopPropagation();showTaskDetail('${attr(task.id)}')">📋 详情</span>` : ''}
                             </div>
@@ -149,6 +174,8 @@
                 </div>
             `;
         }).join('');
+
+        container.innerHTML = batchBar + tasksHtml;
 
         // Fetch remote node info for each task
         tasks.forEach(t => {
@@ -276,6 +303,65 @@
             alert('删除失败: ' + err.message);
         }
     };
+
+    // ============ Batch Operations ============
+    window.toggleSelectAll = function() {
+        const allCheckbox = document.getElementById('batchSelectAll');
+        const checkboxes = document.querySelectorAll('.batch-check');
+        checkboxes.forEach(cb => cb.checked = allCheckbox.checked);
+        updateBatchCount();
+    };
+
+    window.updateBatchCount = function() {
+        const checked = document.querySelectorAll('.batch-check:checked');
+        const countEl = document.getElementById('batchCount');
+        if (countEl) countEl.textContent = `已选 ${checked.length} 项`;
+    };
+
+    function getSelectedTaskIds() {
+        return Array.from(document.querySelectorAll('.batch-check:checked'))
+            .map(cb => cb.dataset.taskId);
+    }
+
+    window.batchPause = async function() {
+        const ids = getSelectedTaskIds();
+        if (!ids.length) { alert('请先选择任务'); return; }
+        if (!confirm(`确定暂停选中的 ${ids.length} 个任务？`)) return;
+        await batchAction(ids, 'pause');
+    };
+
+    window.batchResume = async function() {
+        const ids = getSelectedTaskIds();
+        if (!ids.length) { alert('请先选择任务'); return; }
+        if (!confirm(`确定继续选中的 ${ids.length} 个任务？`)) return;
+        await batchAction(ids, 'resume');
+    };
+
+    window.batchDelete = async function() {
+        const ids = getSelectedTaskIds();
+        if (!ids.length) { alert('请先选择任务'); return; }
+        if (!confirm(`确定删除选中的 ${ids.length} 个任务？文件和记录将被彻底清除。`)) return;
+        await batchAction(ids, 'delete');
+    };
+
+    async function batchAction(taskIds, action) {
+        const endpoint = `/api/task/batch/${action}`;
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task_ids: taskIds })
+            });
+            const data = await res.json();
+            if (data.success) {
+                loadTasks();
+            } else {
+                alert(`批量操作失败: ${data.error || '未知错误'}`);
+            }
+        } catch (err) {
+            alert('批量操作失败: ' + err.message);
+        }
+    }
 
     window.clearCompleted = async function() {
         if (!confirm('确定清除所有已完成/失败/已取消的任务？')) return;

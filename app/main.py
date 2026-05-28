@@ -56,7 +56,7 @@ logger.info("=" * 50)
 logger.info("🚀 AFD starting...")
 
 # === FastAPI 应用 ===
-app: FastAPI = FastAPI(title="Allfiledown", version="0.1.0")
+app: FastAPI = FastAPI(title="Allfiledown", version="0.2.1")
 
 # 静态文件
 _static_dir = Path(__file__).parent / "web" / "static"
@@ -65,7 +65,7 @@ app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 # 注册路由
 app.include_router(web_router)
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api")
 app.include_router(passkey_router)
 
 # 下载目录
@@ -110,6 +110,22 @@ async def startup() -> None:
     await orch.start()
     orch_mod.orchestrator = orch
     logger.info("Orchestrator started")
+
+    # 启动心跳管理
+    try:
+        from app.agent.heartbeat import start_heartbeat
+        await start_heartbeat()
+        logger.info("Heartbeat manager started")
+    except Exception as e:
+        logger.warning("Heartbeat startup failed: %s", e)
+
+    # 启动任务同步
+    try:
+        from app.agent.sync import start_task_sync
+        await start_task_sync()
+        logger.info("Task sync manager started")
+    except Exception as e:
+        logger.warning("Task sync startup failed: %s", e)
 
 
 @app.get("/health")

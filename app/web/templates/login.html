@@ -52,10 +52,7 @@
             if (saved) {
                 try {
                     const creds = JSON.parse(saved);
-                    fetch('/api/auth/session', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(creds)})
-                    .then(r => r.json())
-                    .then(d => { if (d.authenticated) window.location.href = d.redirect || '/'; })
-                    .catch(e => {});
+                    if (creds && creds.username) document.getElementById('username').value = creds.username;
                 } catch(e) {}
             }
             // 检测是否有通行密钥可用
@@ -84,8 +81,8 @@
                     credential: credential.toJSON()
                 })});
                 const result = await complete.json();
-                if (result.authenticated) {
-                    document.cookie = 'afd_token=' + result.token + ';path=/;max-age=86400';
+                if (result.authenticated && result.token) {
+                    document.cookie = 'afd_token=' + result.token + ';path=/;max-age=86400;SameSite=Lax';
                     window.location.href = result.redirect || '/';
                 } else {
                     throw new Error(result.error || '验证失败');
@@ -125,9 +122,9 @@
                 const data = await res.json();
                 if (data.authenticated) {
                     if (remember) {
-                        localStorage.setItem('afd_auth', JSON.stringify({username, password}));
+                        localStorage.setItem('afd_auth', JSON.stringify({username}));
                     } else {
-                        sessionStorage.setItem('afd_auth', JSON.stringify({username, password}));
+                        sessionStorage.setItem('afd_auth', JSON.stringify({username}));
                     }
                     // 设置持久化 cookie（X-Auth-Token）
                     fetch('/api/auth/session', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username, password})})

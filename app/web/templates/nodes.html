@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}节点设置{% endblock %}
+{% block title %}接入配置{% endblock %}
 {% block logo_subtitle %}{% endblock %}
 {% block nav_nodes_class %}active{% endblock %}
 {% block extra_head %}
@@ -39,12 +39,12 @@
 {% endblock %}
 {% block content %}
         <div class="page-header">
-            <h1>节点设置</h1>
+            <h1>接入配置</h1>
         </div>
 
-        <!-- 添加节点 -->
+        <!-- 接入节点 -->
         <div class="section-card">
-            <div class="section-head"><h2>＋ 添加节点</h2></div>
+            <div class="section-head"><h2>＋ 接入节点</h2></div>
             <div class="section-body">
                 <div class="presets-wrap">
                     <span style="font-size:.85rem;color:var(--text-tertiary);align-self:center">快速填充：</span>
@@ -66,7 +66,7 @@
                         <option value="upload">📤 仅上传节点</option>
                     </select>
                     <input type="text" id="nodeToken" placeholder="Auth Token（可选）" class="input full">
-                    <button type="submit" class="btn btn-success full">＋ 添加节点</button>
+                    <button type="submit" class="btn btn-success full">＋ 保存接入节点</button>
                 </form>
             </div>
         </div>
@@ -97,9 +97,9 @@
             </div>
         </div>
 
-        <!-- 安全设置 -->
+        <!-- 接入密钥 -->
         <div class="section-card" id="securitySection">
-            <div class="section-head"><h2>🔐 安全设置</h2></div>
+            <div class="section-head"><h2>🔐 接入密钥</h2></div>
             <div class="section-body">
                 <div class="config-grid" style="margin-bottom:16px">
                     <span class="label">登录密码</span>
@@ -428,8 +428,11 @@
                 const res = await fetch('/api/auth/change-password', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({current_password:cur, new_password:npw})});
                 const data = await res.json();
                 if (data.success) {
-                    alert('密码修改成功！');
-                    closePwModal();
+                    localStorage.removeItem('afd_auth');
+                    sessionStorage.removeItem('afd_auth');
+                    document.cookie = 'afd_token=;path=/;max-age=0;SameSite=Lax';
+                    alert('密码修改成功！请用新密码重新登录。');
+                    window.location.href = '/login';
                 } else {
                     err.textContent = data.error || '修改失败';
                     err.style.display = 'block';

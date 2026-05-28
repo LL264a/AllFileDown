@@ -44,7 +44,7 @@
                 <a href="/" class="active"><span>📂</span><span class="nav-label">文件</span></a>
                 <a href="/downloads"><span>📥</span><span class="nav-label">下载</span></a>
                 <a href="/stations"><span>📊</span><span class="nav-label">节点</span></a>
-                <a href="/nodes"><span>⚙️</span><span class="nav-label">设置</span></a>
+                <a href="/nodes"><span>🔑</span><span class="nav-label">接入配置</span></a>
             </div>
         </div>
         <div class="topbar-right">
@@ -340,13 +340,18 @@
             if (!ids.length) return;
             if (!confirm('确定删除选中的 ' + ids.length + ' 个文件？删除后不可恢复。')) return;
             let deleted = 0;
+            let failed = 0;
             for (const id of ids) {
                 try {
                     const res = await fetch('/api/task/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task_id:id}) });
-                    if (res.ok) deleted++;
-                } catch {}
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && data.deleted !== false) deleted++;
+                    else failed++;
+                } catch { failed++; }
             }
-            toast('✅ 已删除 ' + deleted + ' 个文件','success');
+            if (failed) toast('⚠️ 已删除 ' + deleted + ' 个，失败 ' + failed + ' 个','error');
+            else toast('✅ 已删除 ' + deleted + ' 个文件','success');
+            selectedIds.clear();
             loadFiles();
         }
 
@@ -354,8 +359,9 @@
             if (!confirm('确定删除这个文件？')) return;
             try {
                 const res = await fetch('/api/task/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({task_id:taskId}) });
-                if (res.ok) { toast('✅ 已删除','success'); loadFiles(); }
-                else { const d = await res.json(); toast('❌ '+d.error,'error'); }
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.deleted !== false) { toast('✅ 已删除','success'); loadFiles(); }
+                else { toast('❌ '+(data.error || '删除失败'),'error'); }
             } catch(err) { toast('❌ 删除失败: '+err.message,'error'); }
         }
 

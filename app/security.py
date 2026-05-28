@@ -195,15 +195,16 @@ def add_audit_log(
 ) -> None:
     """Insert a structured audit event."""
     conn = db or get_db()
-    conn.execute(
-        "INSERT INTO audit_logs (action, actor, target, payload, ip, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            action,
-            actor,
-            target,
-            json.dumps(payload or {}, ensure_ascii=False, sort_keys=True),
-            ip,
-            _utc_now_iso(),
-        ),
-    )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(audit_logs)").fetchall()}
+    payload_json = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True)
+    if "event_type" in columns:
+        conn.execute(
+            "INSERT INTO audit_logs (event_type, actor_node, target_node, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+            (action, actor, target, payload_json, _utc_now_iso()),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO audit_logs (action, actor, target, payload, ip, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (action, actor, target, payload_json, ip, _utc_now_iso()),
+        )
     conn.commit()
