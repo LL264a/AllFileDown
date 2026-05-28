@@ -389,6 +389,13 @@ def _protect(request: Request) -> HTMLResponse | None:
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
+    """默认返回 Vue 3 UI"""
+    vue_index = Path(__file__).parent / "static" / "vue" / "index.html"
+    if vue_index.exists():
+        html = vue_index.read_text(encoding="utf-8")
+        html = html.replace('/assets/', '/static/assets/')
+        return HTMLResponse(html)
+    # fallback to old UI
     r = _protect(request)
     if r:
         return r
@@ -400,6 +407,18 @@ async def index(request: Request) -> HTMLResponse:
             "node_name": str(config["node_name"]),
         },
     )
+
+
+@router.get("/app", response_class=HTMLResponse)
+async def vue_app(request: Request) -> HTMLResponse:
+    """Vue 3 重构版 UI"""
+    vue_index = Path(__file__).parent / "static" / "vue" / "index.html"
+    if vue_index.exists():
+        html = vue_index.read_text(encoding="utf-8")
+        # 修复资源路径
+        html = html.replace('/assets/', '/static/assets/')
+        return HTMLResponse(html)
+    return HTMLResponse("Vue app not found", status_code=404)
 
 
 @router.get("/test-ui", response_class=HTMLResponse)
@@ -1243,6 +1262,38 @@ async def get_settings() -> dict[str, Any]:
     return {"config": safe_config}
 
 
+@router.get("/api/settings/node")
+async def get_node_settings() -> dict[str, Any]:
+    """获取节点设置"""
+    return {
+        "node_id": str(config.get("node_id", "")),
+        "node_name": str(config.get("node_name", "")),
+        "node_type": str(config.get("node_type", "full")),
+        "host": str(config.get("host", "")),
+    }
+
+
+@router.get("/api/settings/aria2")
+async def get_aria2_settings() -> dict[str, Any]:
+    """获取 Aria2 设置"""
+    aria2_cfg = config.get("aria2", {})
+    return {
+        "host": aria2_cfg.get("host", "localhost"),
+        "port": aria2_cfg.get("port", 6800),
+        "secret": aria2_cfg.get("secret", ""),
+    }
+
+
+@router.get("/api/settings/network")
+async def get_network_settings() -> dict[str, Any]:
+    """获取网络设置"""
+    return {
+        "bind": str(config.get("bind", "0.0.0.0")),
+        "port": config.get("port", 18790),
+        "file_port": config.get("file_server_port", 18791),
+    }
+
+
 @router.post("/api/settings/node")
 async def save_node_settings(request: Request) -> dict[str, Any]:
     """保存节点设置"""
@@ -1290,6 +1341,45 @@ async def save_aria2_settings(request: Request) -> dict[str, Any]:
         aria2["port"] = int(data["port"])
     if "secret" in data:
         aria2["secret"] = data["secret"]
+
+
+@router.get("/api/aria2/status")
+async def aria2_status() -> dict[str, Any]:
+    """获取 Aria2 状态"""
+    import httpx
+    
+    aria2_cfg = config.get("aria2", {})
+    host = aria2_cfg.get("host", "127.0.0.1")
+    port = aria2_cfg.get("port", 1068)
+    secret = aria2_cfg.get("secret", "")
+    
+    url = f"http://{host}:{port}/jsonrpc"
+    
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.post(url, json={
+                "jsonrpc": "2.0",
+                "method": "aria2.getGlobalStat",
+                "id": 1,
+                "params": [f"token:{secret}"] if secret else []
+            })
+            data = res.json()
+            stats = data.get("result", {})
+            return {
+                "status": "ok",
+                "connected": True,
+                "download_speed": stats.get("downloadSpeed", 0),
+                "upload_speed": stats.get("uploadSpeed", 0),
+                "active": stats.get("numActive", 0),
+                "waiting": stats.get("numWaiting", 0),
+                "stopped": stats.get("numStopped", 0)
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "connected": False,
+            "error": str(e)
+        }
     if "tls" in data:
         aria2["tls"] = bool(data["tls"])
     

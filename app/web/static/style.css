@@ -94,7 +94,8 @@ a:hover{text-decoration:underline}
 
 .topbar{height:var(--topbar-height);background:var(--bg-surface);border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-xl);position:sticky;top:0;z-index:100}
 .topbar-left{display:flex;align-items:center;gap:var(--space-xl)}
-.topbar-logo{font-weight:700;font-size:1.05rem;color:var(--text-primary);display:flex;align-items:center;gap:6px;flex-shrink:0}
+.topbar-logo{font-weight:700;font-size:1.05rem;color:var(--text-primary);display:flex;align-items:center;gap:6px;flex-shrink:0;flex-direction:column;align-items:flex-start;line-height:1.2}
+.topbar-logo .logo-version{font-size:0.65rem;font-weight:400;color:var(--text-tertiary);margin-top:2px}
 .topbar-logo .logo-afd{color:var(--accent);font-weight:700;letter-spacing:1px}
 .topbar-nav{display:flex;align-items:center;gap:2px}
 .topbar-nav a{display:flex;align-items:center;gap:6px;padding:6px 12px;font-size:.95rem;font-weight:500;color:var(--text-secondary);border-radius:var(--radius-sm);transition:all var(--transition-fast);text-decoration:none}
