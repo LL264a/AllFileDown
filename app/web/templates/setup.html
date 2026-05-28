@@ -12,6 +12,7 @@
         .setup-logo{text-align:center;margin-bottom:22px}
         .setup-logo h1{font-size:1.5rem;font-weight:700;color:var(--text-primary)}
         .setup-logo p{font-size:.86rem;color:var(--text-tertiary);margin-top:6px;line-height:1.6}
+        .setup-logo p.logo-version{font-size:.7rem;color:var(--text-tertiary);margin-top:2px}
         .setup-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
         .setup-form .full{grid-column:1/-1}
         .field{display:flex;flex-direction:column;gap:6px}
@@ -29,6 +30,7 @@
         <div class="setup-card">
             <div class="setup-logo">
                 <h1>AFD 首次初始化</h1>
+                <p class="logo-version">v0.2.1</p>
                 <p>配置一次后就会进入正常登录流程。</p>
             </div>
             <form class="setup-form" onsubmit="submitSetup(event)">
