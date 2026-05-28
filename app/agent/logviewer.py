@@ -90,7 +90,7 @@ def get_log_levels(filename: str) -> list[str]:
                 match = level_pattern.search(line)
                 if match:
                     levels.add(match.group(1).upper())
-    except:
+    except Exception:
         pass
     
     return sorted(list(levels))

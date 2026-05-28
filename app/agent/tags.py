@@ -143,7 +143,7 @@ def auto_tag_task(task_id: str, url: str) -> list[str]:
                         (task_id, tag["id"])
                     )
                     added_tags.append(tag_name)
-                except:
+                except Exception:
                     pass
                 
                 break

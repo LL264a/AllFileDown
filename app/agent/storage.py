@@ -60,9 +60,9 @@ def get_dir_size(path: Path) -> int:
             if item.is_file():
                 try:
                     total += item.stat().st_size
-                except:
+                except Exception:
                     pass
-    except:
+    except Exception:
         pass
     return total
 
